@@ -24,6 +24,8 @@
     .btn-red:hover { background: #b91c1c; }
     .btn-blue { background: #2563eb; }
     .btn-blue:hover { background: #1d4ed8; }
+    .btn-outline { background: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; padding: 5px 10px; font-size: 12px; }
+    .btn-outline:hover { background: #f1f5f9; }
     .btn-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 12px 16px; background: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; font-size: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
     .btn-google:hover { background: #f8fafc; }
 
@@ -51,6 +53,8 @@
     .form-group { margin-bottom: 10px; }
     label { font-size: 12px; font-weight: 600; color: #334e68; }
     input, select { padding: 8px 10px; border: 1px solid #bcccdc; border-radius: 4px; width: 100%; box-sizing: border-box; font-size: 13px; margin-top: 4px; }
+    .csv-box { margin-top: 16px; padding-top: 14px; border-top: 1px dashed #cbd5e1; }
+    .csv-example { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 10px; font-family: Consolas, Monaco, monospace; font-size: 11px; color: #334e68; margin: 8px 0 10px 0; white-space: pre; overflow-x: auto; }
     .alert { padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; font-size: 14px; background: #e3f9e5; color: #1f7a33; border: 1px solid #a3d9a5; display: none; }
     .alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 
@@ -195,9 +199,9 @@
           <button class="btn-green" style="width: 100%;" onclick="saveInterestRates()">Save Rates & Borrowing Rules</button>
         </div>
 
-        <!-- 2. Add Student -->
+        <!-- 2. Add Student & CSV Bulk Upload -->
         <div class="card">
-          <h3 style="margin-top: 0;">Add New Student</h3>
+          <h3 style="margin-top: 0;">Add Students</h3>
           <div class="form-group">
             <label>Full Name</label>
             <input type="text" id="newStudentName" placeholder="e.g. Liam Carter">
@@ -210,7 +214,24 @@
             <label>Starting Cash (NZD $)</label>
             <input type="number" id="newStudentCash" value="1000" step="0.01">
           </div>
-          <button class="btn-green" style="width: 100%;" onclick="addStudent()">Add Student to Class</button>
+          <button class="btn-green" style="width: 100%;" onclick="addStudent()">Add Single Student</button>
+
+          <div class="csv-box">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <strong style="font-size: 13px; color: #102a43;">Bulk Upload via CSV</strong>
+              <button type="button" class="btn-outline" onclick="downloadSampleCsv()">Download Sample CSV</button>
+            </div>
+            <p style="font-size: 11px; color: #486581; margin: 6px 0 4px 0;">
+              Format: <code>name,email,cash</code> (<code>cash</code> is optional and defaults to <strong>$1000</strong>):
+            </p>
+            <div class="csv-example">name,email,cash
+Liam Carter,22145@rangiorahigh.school.nz,1000
+Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;">
+              <input type="file" id="studentCsvInput" accept=".csv,text/csv" style="margin-top: 0; padding: 6px; background: white;">
+              <button id="btnUploadCsv" class="btn-blue" onclick="uploadStudentsCsv()">Upload CSV</button>
+            </div>
+          </div>
         </div>
 
         <!-- 3. Adjust Individual Balance -->
@@ -640,6 +661,147 @@
       document.getElementById('newStudentEmail').value = '';
       showAlert('adminAlert', `Added ${name} (${email}) with ${formatMoney(cash)}.`);
       await loadTeacherData();
+    }
+
+    function downloadSampleCsv() {
+      const sample = [
+        'name,email,cash',
+        'Liam Carter,22145@rangiorahigh.school.nz,1000',
+        'Emma Wilson,22198@rangiorahigh.school.nz,1000',
+        'Noah Taylor,22301@rangiorahigh.school.nz,1000'
+      ].join('\n');
+
+      const blob = new Blob([sample], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'sikmawoolf_students_template.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function parseCsvLine(line) {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    }
+
+    async function uploadStudentsCsv() {
+      const fileInput = document.getElementById('studentCsvInput');
+      const btn = document.getElementById('btnUploadCsv');
+      const file = fileInput.files?.[0];
+
+      if (!file) {
+        showAlert('adminAlert', 'Please choose a .csv file first.', true);
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = 'Uploading...';
+
+      try {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+        if (lines.length === 0) {
+          throw new Error('The selected CSV file is empty.');
+        }
+
+        const existingEmails = new Set(
+          cachedBoard.map(s => (s.email || '').toLowerCase().trim())
+        );
+        const seenInFile = new Set();
+        const toInsert = [];
+        let skippedDuplicates = 0;
+
+        for (let i = 0; i < lines.length; i++) {
+          const cols = parseCsvLine(lines[i]);
+          if (cols.length < 2) continue;
+
+          // Skip header row if present
+          if (
+            i === 0 &&
+            cols[0].toLowerCase() === 'name' &&
+            cols[1].toLowerCase().includes('email')
+          ) {
+            continue;
+          }
+
+          const name = cols[0].trim();
+          const email = cols[1].trim().toLowerCase();
+          const rawCash = cols[2] !== undefined ? cols[2].replace(/[$,]/g, '').trim() : '';
+          const cash = rawCash === '' ? 1000 : parseFloat(rawCash);
+
+          if (!name || !email || !email.includes('@')) {
+            throw new Error(`Invalid name or email on line ${i + 1}: "${lines[i]}"`);
+          }
+          if (isNaN(cash) || cash < 0) {
+            throw new Error(`Invalid cash amount on line ${i + 1}: "${cols[2]}"`);
+          }
+
+          if (existingEmails.has(email) || seenInFile.has(email)) {
+            skippedDuplicates++;
+            continue;
+          }
+
+          seenInFile.add(email);
+          toInsert.push({
+            classroom_id: activeClassroomId,
+            name,
+            email,
+            student_code: email.split('@')[0],
+            cash: Number(cash.toFixed(2)),
+            term_deposit: 0,
+            savings: 0,
+            bonds: 0,
+            loan_balance: 0
+          });
+        }
+
+        if (toInsert.length === 0) {
+          showAlert(
+            'adminAlert',
+            skippedDuplicates > 0
+              ? `No new students added (${skippedDuplicates} duplicate email(s) already in this class).`
+              : 'No valid student rows found in the CSV.',
+            true
+          );
+          return;
+        }
+
+        const { error } = await sb.from('students').insert(toInsert);
+        if (error) throw error;
+
+        fileInput.value = '';
+        const dupNote = skippedDuplicates > 0 ? ` (${skippedDuplicates} duplicate(s) skipped)` : '';
+        showAlert('adminAlert', `Successfully imported ${toInsert.length} student(s) into the class${dupNote}!`);
+        await loadTeacherData();
+      } catch (err) {
+        showAlert('adminAlert', 'CSV upload failed: ' + (err.message || err), true);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Upload CSV';
+      }
     }
 
     async function adjustStudentCash() {
