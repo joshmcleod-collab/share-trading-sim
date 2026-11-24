@@ -305,6 +305,19 @@
         await sb.auth.signOut();
         return;
       }
+      if (error) {
+        showAlert('loginAlert', 'Database error: ' + error.message, true);
+        return;
+      }
+      if (!student) {
+        showAlert(
+          'loginAlert',
+          `No student account found for ${email}. Ask your teacher to check your registered email.`,
+          true
+        );
+        await sb.auth.signOut();
+        return;
+      }
 
       currentStudent = student;
 
