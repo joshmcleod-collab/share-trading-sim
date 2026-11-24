@@ -27,7 +27,7 @@
 
     .hidden { display: none !important; }
     .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-    .controls-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+    .controls-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
     .card { background: #f8fafc; padding: 20px; border-radius: 6px; border: 1px solid #e2e8f0; }
     .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
     .stat-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px 16px; }
@@ -42,6 +42,8 @@
     .badge { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; }
     .badge-buy { background: #dcfce7; color: #166534; }
     .badge-sell { background: #fee2e2; color: #991b1b; }
+    .badge-borrow { background: #fef3c7; color: #92400e; }
+    .badge-repay { background: #d1fae5; color: #065f46; }
     .badge-other { background: #e0f2fe; color: #075985; }
 
     .form-group { margin-bottom: 10px; }
@@ -104,7 +106,7 @@
           <div class="val" id="statStudents">0</div>
         </div>
         <div class="stat-box">
-          <div class="label">Class Total Net Worth</div>
+          <div class="label">Class Net Worth</div>
           <div class="val" id="statClassWorth">$0.00</div>
         </div>
         <div class="stat-box">
@@ -112,8 +114,8 @@
           <div class="val" id="statAvgWorth">$0.00</div>
         </div>
         <div class="stat-box">
-          <div class="label">Tracked Stocks</div>
-          <div class="val" id="statStocks">0</div>
+          <div class="label">Total Class Debt</div>
+          <div class="val" id="statTotalDebt" style="color: #dc2626;">$0.00</div>
         </div>
       </div>
 
@@ -129,11 +131,12 @@
                   <th>Student Name</th>
                   <th>Liquid Cash</th>
                   <th>Invested / Fixed</th>
+                  <th>Borrowed</th>
                   <th>Total Net Worth</th>
                 </tr>
               </thead>
               <tbody id="adminLeaderboard">
-                <tr><td colspan="5">Loading class data...</td></tr>
+                <tr><td colspan="6">Loading class data...</td></tr>
               </tbody>
             </table>
           </div>
@@ -154,9 +157,42 @@
         </div>
       </div>
 
-      <!-- Admin Management Controls -->
+      <!-- Admin Management Controls (2x2 Grid) -->
       <div class="controls-grid">
-        <!-- 1. Add Student -->
+        <!-- 1. Daily Rates & Borrowing Rules -->
+        <div class="card">
+          <h3 style="margin-top: 0;">Daily Rates & Borrowing Rules</h3>
+          <p style="font-size: 12px; color: #486581; margin-top: 0;">
+            Applied automatically weekdays at 5:30 PM NZDT.
+          </p>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Term Dep %</label>
+              <input type="number" id="rateTermDeposit" step="0.05" value="1.0">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Savings %</label>
+              <input type="number" id="rateSavings" step="0.05" value="0.8">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Bonds %</label>
+              <input type="number" id="rateBonds" step="0.05" value="0.5">
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Loan Charge % / day</label>
+              <input type="number" id="rateBorrow" step="0.05" value="1.5">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Max Borrow (% Net Worth)</label>
+              <input type="number" id="maxBorrowPct" step="5" min="0" max="500" value="50">
+            </div>
+          </div>
+          <button class="btn-green" style="width: 100%;" onclick="saveInterestRates()">Save Rates & Borrowing Rules</button>
+        </div>
+
+        <!-- 2. Add Student -->
         <div class="card">
           <h3 style="margin-top: 0;">Add New Student</h3>
           <div class="form-group">
@@ -174,9 +210,12 @@
           <button class="btn-green" style="width: 100%;" onclick="addStudent()">Add Student to Class</button>
         </div>
 
-        <!-- 2. Adjust Individual Balance -->
+        <!-- 3. Adjust Individual Balance -->
         <div class="card">
           <h3 style="margin-top: 0;">Adjust Student Cash</h3>
+          <p style="font-size: 12px; color: #486581; margin-top: 0;">
+            Award bonuses or deduct fines directly from a student's liquid cash.
+          </p>
           <div class="form-group">
             <label>Select Student</label>
             <select id="adjustStudentSelect">
@@ -187,14 +226,14 @@
             <label>Amount (+ to Bonus / - to Fine)</label>
             <input type="number" id="adjustAmount" step="0.01" placeholder="e.g. 100 or -50">
           </div>
-          <button class="btn-blue" style="width: 100%; margin-top: 26px;" onclick="adjustStudentCash()">Apply Cash Adjustment</button>
+          <button class="btn-blue" style="width: 100%; margin-top: 10px;" onclick="adjustStudentCash()">Apply Cash Adjustment</button>
         </div>
 
-        <!-- 3. Classroom Reset -->
+        <!-- 4. Locked Classroom Reset -->
         <div class="card" style="border-color: #fecaca;">
           <h3 style="margin-top: 0; color: #991b1b;">Classroom Reset</h3>
           <p style="font-size: 12px; color: #486581; margin-top: 0;">
-            Resets all students to starting cash and deletes all holdings, fixed income, and transaction history.
+            Resets all students to starting cash and deletes all holdings, fixed income, loans, and history.
           </p>
           <div class="form-group">
             <label>Reset Starting Cash (NZD $)</label>
@@ -208,30 +247,6 @@
             🔒 Reset Entire Classroom
           </button>
         </div>
-
-        <!-- 4. Daily Interest Rates -->
-        <div class="card">
-          <h3 style="margin-top: 0;">Daily Interest Rates (%)</h3>
-          <p style="font-size: 12px; color: #486581; margin-top: 0;">
-            Applied automatically weekdays at 5:30 PM NZDT.
-          </p>
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px;">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label>Term Dep %</label>
-              <input type="number" id="rateTermDeposit" step="0.05" value="1.0">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label>Savings %</label>
-              <input type="number" id="rateSavings" step="0.05" value="0.8">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label>Bonds %</label>
-              <input type="number" id="rateBonds" step="0.05" value="0.5">
-            </div>
-          </div>
-          <button class="btn-green" style="width: 100%;" onclick="saveInterestRates()">Save Interest Rates</button>
-        </div>
-        
       </div>
     </div>
   </div>
@@ -244,6 +259,7 @@
 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     let cachedBoard = [];
+    let resetLockTimer = null;
 
     function formatMoney(num) {
       const val = parseFloat(num);
@@ -311,11 +327,12 @@
 
     async function loadTeacherData() {
       try {
-        const [studentsRes, holdingsRes, stocksRes, txRes] = await Promise.all([
+        const [studentsRes, holdingsRes, stocksRes, txRes, settingsRes] = await Promise.all([
           sb.from('students').select('*').eq('classroom_id', CLASSROOM_ID),
           sb.from('holdings').select('*'),
           sb.from('stocks').select('ticker, live_price').eq('classroom_id', CLASSROOM_ID),
-          sb.from('transactions').select('*').order('created_at', { ascending: false }).limit(60)
+          sb.from('transactions').select('*').eq('classroom_id', CLASSROOM_ID).order('created_at', { ascending: false }).limit(60),
+          sb.from('classroom_settings').select('*').eq('classroom_id', CLASSROOM_ID).maybeSingle()
         ]);
 
         const firstError = studentsRes.error || holdingsRes.error || stocksRes.error || txRes.error;
@@ -327,6 +344,15 @@
         const holdings = holdingsRes.data || [];
         const stocks = stocksRes.data || [];
         const transactions = txRes.data || [];
+        const settings = settingsRes.data;
+
+        if (settings) {
+          document.getElementById('rateTermDeposit').value = settings.term_deposit_rate;
+          document.getElementById('rateSavings').value = settings.savings_rate;
+          document.getElementById('rateBonds').value = settings.bonds_rate;
+          document.getElementById('rateBorrow').value = settings.borrow_rate ?? 1.5;
+          document.getElementById('maxBorrowPct').value = settings.max_borrow_pct ?? 50;
+        }
 
         const priceMap = {};
         stocks.forEach(s => { priceMap[s.ticker] = Number(s.live_price) || 0; });
@@ -334,18 +360,21 @@
         const studentNameMap = {};
         students.forEach(s => { studentNameMap[s.id] = s.name; });
 
+        // Build rankings (Assets minus Borrowed Loan Balance)
         const board = students.map(st => {
           const stHoldings = holdings.filter(h => h.student_id === st.id && Number(h.quantity) > 0);
           const stockVal = stHoldings.reduce((sum, h) => sum + (Number(h.quantity) || 0) * (priceMap[h.ticker] || 0), 0);
           const fixedVal = (Number(st.term_deposit) || 0) + (Number(st.savings) || 0) + (Number(st.bonds) || 0);
           const cash = Number(st.cash) || 0;
-          const total = cash + fixedVal + stockVal;
+          const borrowed = Number(st.loan_balance) || 0;
+          const total = cash + fixedVal + stockVal - borrowed;
           return {
             id: st.id,
             name: st.name,
             email: st.email,
             cash,
             investedAndFixed: stockVal + fixedVal,
+            borrowed,
             total
           };
         });
@@ -354,16 +383,19 @@
         board.forEach((s, i) => s.rank = i + 1);
         cachedBoard = board;
 
+        // Update KPI Stats
         const classWorth = board.reduce((sum, s) => sum + s.total, 0);
+        const totalDebt = board.reduce((sum, s) => sum + s.borrowed, 0);
         document.getElementById('statStudents').innerText = board.length;
         document.getElementById('statClassWorth').innerText = formatMoney(classWorth);
         document.getElementById('statAvgWorth').innerText = board.length ? formatMoney(classWorth / board.length) : '$0.00';
-        document.getElementById('statStocks').innerText = stocks.length;
+        document.getElementById('statTotalDebt').innerText = formatMoney(totalDebt);
 
+        // Render Leaderboard Table
         const tbody = document.getElementById('adminLeaderboard');
         tbody.innerHTML = '';
         if (board.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5">No students found in this classroom.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6">No students found in this classroom.</td></tr>';
         } else {
           board.forEach(st => {
             tbody.innerHTML += `
@@ -372,11 +404,15 @@
                 <td>${st.name}<br><small style="color:#64748b;">${st.email || ''}</small></td>
                 <td>${formatMoney(st.cash)}</td>
                 <td>${formatMoney(st.investedAndFixed)}</td>
+                <td style="color: ${st.borrowed > 0 ? '#dc2626' : '#64748b'}; font-weight: ${st.borrowed > 0 ? '700' : '400'};">
+                  ${formatMoney(st.borrowed)}
+                </td>
                 <td><strong>${formatMoney(st.total)}</strong></td>
               </tr>`;
           });
         }
 
+        // Populate Adjust Cash dropdown
         const sel = document.getElementById('adjustStudentSelect');
         sel.innerHTML = '';
         [...board].sort((a, b) => a.name.localeCompare(b.name)).forEach(st => {
@@ -386,6 +422,7 @@
           sel.appendChild(opt);
         });
 
+        // Render Transaction Logs
         const logBody = document.getElementById('adminLogs');
         logBody.innerHTML = '';
         if (transactions.length === 0) {
@@ -395,9 +432,12 @@
             const timeStr = tx.created_at ? new Date(tx.created_at).toLocaleString('en-NZ', { dateStyle: 'short', timeStyle: 'short' }) : '';
             const studentName = studentNameMap[tx.student_id] || tx.student_name || 'Unknown';
             const action = (tx.action || tx.type || 'TRADE').toUpperCase();
+
             let badgeClass = 'badge-other';
             if (action === 'BUY') badgeClass = 'badge-buy';
             else if (action === 'SELL') badgeClass = 'badge-sell';
+            else if (action === 'BORROW') badgeClass = 'badge-borrow';
+            else if (action === 'REPAY') badgeClass = 'badge-repay';
 
             const ticker = tx.ticker || '';
             const amt = tx.amount ?? tx.total_amount ?? tx.value ?? 0;
@@ -417,6 +457,41 @@
       }
     }
 
+    async function saveInterestRates() {
+      const termDepositRate = parseFloat(document.getElementById('rateTermDeposit').value);
+      const savingsRate = parseFloat(document.getElementById('rateSavings').value);
+      const bondsRate = parseFloat(document.getElementById('rateBonds').value);
+      const borrowRate = parseFloat(document.getElementById('rateBorrow').value);
+      const maxBorrowPct = parseFloat(document.getElementById('maxBorrowPct').value);
+
+      if ([termDepositRate, savingsRate, bondsRate, borrowRate, maxBorrowPct].some(isNaN)) {
+        showAlert('adminAlert', 'Please enter valid numbers for all rate and borrowing fields.', true);
+        return;
+      }
+
+      const { error } = await sb
+        .from('classroom_settings')
+        .upsert({
+          classroom_id: CLASSROOM_ID,
+          term_deposit_rate: termDepositRate,
+          savings_rate: savingsRate,
+          bonds_rate: bondsRate,
+          borrow_rate: borrowRate,
+          max_borrow_pct: maxBorrowPct,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) {
+        showAlert('adminAlert', 'Failed to save rates: ' + error.message, true);
+        return;
+      }
+
+      showAlert(
+        'adminAlert',
+        `Saved! TD: ${termDepositRate}%, Savings: ${savingsRate}%, Bonds: ${bondsRate}%, Loan Charge: ${borrowRate}%/day, Max Borrow: ${maxBorrowPct}%.`
+      );
+    }
+
     async function triggerPriceSync() {
       const btn = document.getElementById('btnSyncPrices');
       btn.disabled = true;
@@ -424,7 +499,7 @@
       showAlert('adminAlert', 'Running live Yahoo Finance price sync (this takes ~10-15 seconds)...', false);
 
       try {
-        const { data, error } = await sb.functions.invoke('sync-prices');
+        const { error } = await sb.functions.invoke('sync-prices');
         if (error) throw error;
         showAlert('adminAlert', 'Live stock prices synced successfully!');
         await loadTeacherData();
@@ -439,7 +514,7 @@
     async function recordDailySnapshot() {
       const btn = document.getElementById('btnSnapshot');
       btn.disabled = true;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Pacific/Auckland' });
 
       try {
         await loadTeacherData();
@@ -450,7 +525,6 @@
           total_net_worth: Number(st.total.toFixed(2))
         }));
 
-        // Remove any existing snapshot for today first so re-clicking updates cleanly
         await sb.from('portfolio_history')
           .delete()
           .eq('classroom_id', CLASSROOM_ID)
@@ -486,7 +560,8 @@
         cash,
         term_deposit: 0,
         savings: 0,
-        bonds: 0
+        bonds: 0,
+        loan_balance: 0
       });
 
       if (error) {
@@ -527,16 +602,47 @@
       await loadTeacherData();
     }
 
+    function toggleResetLock() {
+      const input = document.getElementById('resetConfirmInput');
+      const btn = document.getElementById('btnResetClassroom');
+      const unlocked = input.value.trim() === 'RESET';
+
+      btn.disabled = !unlocked;
+      btn.innerText = unlocked ? '⚠️ Reset Entire Classroom' : '🔒 Reset Entire Classroom';
+
+      clearTimeout(resetLockTimer);
+      if (unlocked) {
+        resetLockTimer = setTimeout(() => {
+          input.value = '';
+          btn.disabled = true;
+          btn.innerText = '🔒 Reset Entire Classroom';
+        }, 15000);
+      }
+    }
+
     async function resetClassroom() {
+      const confirmInput = document.getElementById('resetConfirmInput');
+      const btn = document.getElementById('btnResetClassroom');
+
+      if (confirmInput.value.trim() !== 'RESET') {
+        showAlert('adminAlert', 'Type RESET in the confirmation box to unlock.', true);
+        return;
+      }
+
       const startCash = parseFloat(document.getElementById('resetCashAmount').value);
       if (isNaN(startCash) || startCash < 0) {
         showAlert('adminAlert', 'Enter a valid starting cash amount.', true);
         return;
       }
 
-      if (!confirm(`Reset ALL students in this classroom to ${formatMoney(startCash)} and delete all stock holdings?`)) {
+      if (!confirm(`FINAL WARNING: Reset all ${cachedBoard.length} students to ${formatMoney(startCash)} and wipe all holdings, loans, & history?`)) {
         return;
       }
+
+      confirmInput.value = '';
+      btn.disabled = true;
+      btn.innerText = 'Resetting...';
+      clearTimeout(resetLockTimer);
 
       try {
         const studentIds = cachedBoard.map(s => s.id);
@@ -545,9 +651,15 @@
           if (hErr) throw hErr;
         }
 
+        const { error: tErr } = await sb.from('transactions').delete().eq('classroom_id', CLASSROOM_ID);
+        if (tErr) throw tErr;
+
+        const { error: pErr } = await sb.from('portfolio_history').delete().eq('classroom_id', CLASSROOM_ID);
+        if (pErr) throw pErr;
+
         const { error: sErr } = await sb
           .from('students')
-          .update({ cash: startCash, term_deposit: 0, savings: 0, bonds: 0 })
+          .update({ cash: startCash, term_deposit: 0, savings: 0, bonds: 0, loan_balance: 0 })
           .eq('classroom_id', CLASSROOM_ID);
         if (sErr) throw sErr;
 
@@ -555,6 +667,8 @@
         await loadTeacherData();
       } catch (err) {
         showAlert('adminAlert', 'Reset failed: ' + err.message, true);
+      } finally {
+        btn.innerText = '🔒 Reset Entire Classroom';
       }
     }
   </script>
