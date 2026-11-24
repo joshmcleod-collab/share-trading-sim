@@ -2,23 +2,57 @@
 <html>
 <head>
   <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SikmaWolff - Teacher Admin</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f4f8; color: #102a43; }
     .container { max-width: 1200px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(16,42,67,0.08); border-top: 5px solid #102a43; }
-    .brand-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #f0f4f8; padding-bottom: 15px; margin-bottom: 20px; }
+    .brand-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #f0f4f8; padding-bottom: 15px; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
     .brand-logo-container { display: flex; align-items: center; gap: 12px; }
     .brand-title { margin: 0; font-size: 20px; color: #102a43; font-weight: 700; letter-spacing: -0.5px; }
-    button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; background: #102a43; color: white; font-weight: 600; transition: background 0.2s; }
+    .header-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; background: #102a43; color: white; font-weight: 600; transition: background 0.2s; font-size: 13px; }
     button:hover { background: #243b53; }
+    button:disabled { background: #9fb3c8; cursor: not-allowed; }
+    .btn-green { background: #16a34a; }
+    .btn-green:hover { background: #15803d; }
+    .btn-red { background: #dc2626; }
+    .btn-red:hover { background: #b91c1c; }
+    .btn-blue { background: #2563eb; }
+    .btn-blue:hover { background: #1d4ed8; }
+    .btn-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 12px 16px; background: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; font-size: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .btn-google:hover { background: #f8fafc; }
+
+    .hidden { display: none !important; }
     .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+    .controls-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
     .card { background: #f8fafc; padding: 20px; border-radius: 6px; border: 1px solid #e2e8f0; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; background: white; }
+    .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+    .stat-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px 16px; }
+    .stat-box .label { font-size: 12px; color: #486581; font-weight: 600; text-transform: uppercase; }
+    .stat-box .val { font-size: 22px; font-weight: 700; color: #102a43; margin-top: 4px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; background: white; }
     th, td { border-bottom: 1px solid #e2e8f0; padding: 10px; text-align: left; }
-    th { background: #f1f5f9; color: #334e68; position: sticky; top: 0; }
-    .scrollable-table { max-height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 4px; }
+    th { background: #f1f5f9; color: #334e68; position: sticky; top: 0; z-index: 1; }
+    .scrollable-table { max-height: 460px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 4px; background: white; }
+
     .badge { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; }
     .badge-buy { background: #dcfce7; color: #166534; }
     .badge-sell { background: #fee2e2; color: #991b1b; }
+    .badge-other { background: #e0f2fe; color: #075985; }
+
+    .form-group { margin-bottom: 10px; }
+    label { font-size: 12px; font-weight: 600; color: #334e68; }
+    input, select { padding: 8px 10px; border: 1px solid #bcccdc; border-radius: 4px; width: 100%; box-sizing: border-box; font-size: 13px; margin-top: 4px; }
+    .alert { padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; font-size: 14px; background: #e3f9e5; color: #1f7a33; border: 1px solid #a3d9a5; display: none; }
+    .alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+
+    @media (max-width: 900px) {
+      .dashboard-grid, .controls-grid, .stat-row { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -33,81 +67,462 @@
         </svg>
         <h2 class="brand-title">SikmaWolff - Teacher Admin</h2>
       </div>
-      <button onclick="loadTeacherData()">Refresh Data</button>
+      <div id="headerControls" class="header-actions hidden">
+        <button id="btnSyncPrices" class="btn-blue" onclick="triggerPriceSync()">Sync Live Prices Now</button>
+        <button id="btnSnapshot" class="btn-green" onclick="recordDailySnapshot()">Save Daily Snapshot</button>
+        <button onclick="loadTeacherData()">Refresh Data</button>
+        <button class="btn-red" onclick="logout()">Sign Out</button>
+      </div>
     </div>
 
-    <div class="dashboard-grid">
-      <div class="card">
-        <h3 style="margin-top: 0;">Class Overview & Rankings</h3>
-        <div class="scrollable-table">
-          <table>
-            <thead>
-              <tr><th>Rank</th><th>Student Name</th><th>Liquid Cash</th><th>Total Net Worth</th></tr>
-            </thead>
-            <tbody id="adminLeaderboard">
-              <tr><td colspan="4">Loading class data...</td></tr>
-            </tbody>
-          </table>
+    <!-- TEACHER LOGIN SCREEN -->
+    <div id="loginScreen" class="card" style="max-width: 420px; margin: 40px auto; text-align: center;">
+      <h3 style="margin-top: 0;">Teacher Authentication</h3>
+      <p style="color: #486581; font-size: 14px; margin-bottom: 20px;">
+        Sign in with your authorized teacher Google account to manage the simulation.
+      </p>
+      <div id="loginAlert" class="alert alert-error" style="text-align: left;"></div>
+      <button id="googleLoginBtn" class="btn-google" onclick="signInWithGoogle()">
+        <svg width="18" height="18" viewBox="0 0 48 48">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Sign in with Google
+      </button>
+    </div>
+
+    <!-- TEACHER ADMIN DASHBOARD -->
+    <div id="adminDashboard" class="hidden">
+      <div id="adminAlert" class="alert"></div>
+
+      <!-- KPI Summary Bar -->
+      <div class="stat-row">
+        <div class="stat-box">
+          <div class="label">Active Traders</div>
+          <div class="val" id="statStudents">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">Class Total Net Worth</div>
+          <div class="val" id="statClassWorth">$0.00</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">Average Portfolio</div>
+          <div class="val" id="statAvgWorth">$0.00</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">Tracked Stocks</div>
+          <div class="val" id="statStocks">0</div>
         </div>
       </div>
 
-      <div class="card">
-        <h3 style="margin-top: 0;">Recent Market Transactions</h3>
-        <div class="scrollable-table">
-          <table>
-            <thead>
-              <tr><th>Time</th><th>Student</th><th>Action</th><th>Details</th></tr>
-            </thead>
-            <tbody id="adminLogs">
-              <tr><td colspan="4">Loading transaction history...</td></tr>
-            </tbody>
-          </table>
+      <!-- Rankings & Transactions -->
+      <div class="dashboard-grid">
+        <div class="card">
+          <h3 style="margin-top: 0;">Class Overview & Rankings</h3>
+          <div class="scrollable-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Student Name</th>
+                  <th>Liquid Cash</th>
+                  <th>Invested / Fixed</th>
+                  <th>Total Net Worth</th>
+                </tr>
+              </thead>
+              <tbody id="adminLeaderboard">
+                <tr><td colspan="5">Loading class data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top: 0;">Recent Market Transactions</h3>
+          <div class="scrollable-table">
+            <table>
+              <thead>
+                <tr><th>Time</th><th>Student</th><th>Action</th><th>Details</th></tr>
+              </thead>
+              <tbody id="adminLogs">
+                <tr><td colspan="4">Loading transaction history...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin Management Controls -->
+      <div class="controls-grid">
+        <!-- 1. Add Student -->
+        <div class="card">
+          <h3 style="margin-top: 0;">Add New Student</h3>
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="newStudentName" placeholder="e.g. Liam Carter">
+          </div>
+          <div class="form-group">
+            <label>School Google Email</label>
+            <input type="email" id="newStudentEmail" placeholder="e.g. 22145@rangiorahigh.school.nz">
+          </div>
+          <div class="form-group">
+            <label>Starting Cash (NZD $)</label>
+            <input type="number" id="newStudentCash" value="1000" step="0.01">
+          </div>
+          <button class="btn-green" style="width: 100%;" onclick="addStudent()">Add Student to Class</button>
+        </div>
+
+        <!-- 2. Adjust Individual Balance -->
+        <div class="card">
+          <h3 style="margin-top: 0;">Adjust Student Cash</h3>
+          <div class="form-group">
+            <label>Select Student</label>
+            <select id="adjustStudentSelect">
+              <option value="">Loading students...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Amount (+ to Bonus / - to Fine)</label>
+            <input type="number" id="adjustAmount" step="0.01" placeholder="e.g. 100 or -50">
+          </div>
+          <button class="btn-blue" style="width: 100%; margin-top: 26px;" onclick="adjustStudentCash()">Apply Cash Adjustment</button>
+        </div>
+
+        <!-- 3. Classroom Reset -->
+        <div class="card">
+          <h3 style="margin-top: 0;">Classroom Reset</h3>
+          <p style="font-size: 13px; color: #486581; margin-top: 0;">
+            Resets all students to the starting cash balance and clears all stock holdings.
+          </p>
+          <div class="form-group">
+            <label>Reset Starting Cash (NZD $)</label>
+            <input type="number" id="resetCashAmount" value="1000" step="0.01">
+          </div>
+          <button class="btn-red" style="width: 100%; margin-top: 26px;" onclick="resetClassroom()">Reset Entire Classroom</button>
         </div>
       </div>
     </div>
   </div>
 
   <script>
+    const SUPABASE_URL = 'https://uwaslimqdgejkpknurku.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_B4UfRGUN4MpHDjOKzsNWwg_8hHDabmX';
+    const CLASSROOM_ID = 'af32c8ee-8808-499f-a014-2b7ee8a1a0ad';
+    const TEACHER_EMAILS = ['mlj@rangiorahigh.school.nz'];
+
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let cachedBoard = [];
+
     function formatMoney(num) {
-      return '$' + parseFloat(num).toFixed(2);
+      const val = parseFloat(num);
+      return '$' + (isNaN(val) ? '0.00' : val.toFixed(2));
     }
 
-    function loadTeacherData() {
-      google.script.run.withSuccessHandler(board => {
-        const tbody = document.getElementById('adminLeaderboard');
-        tbody.innerHTML = '';
-        board.forEach(student => {
-          tbody.innerHTML += '<tr><td><strong>#' + student.rank + '</strong></td><td>' + student.name + '</td><td>' + formatMoney(student.cash) + '</td><td><strong>' + formatMoney(student.total) + '</strong></td></tr>';
-        });
-      }).getLeaderboard();
+    function showAlert(id, msg, isError = false) {
+      const el = document.getElementById(id);
+      el.innerText = msg;
+      el.className = isError ? 'alert alert-error' : 'alert';
+      el.style.display = 'block';
+    }
 
-      google.script.run.withSuccessHandler(logs => {
-        const tbody = document.getElementById('adminLogs');
-        tbody.innerHTML = '';
-        
-        logs.reverse().forEach(log => {
-          const date = log[0];
-          const student = log[1];
-          const action = log[2];
-          let details = log[3];
-          
-          let badgeClass = '';
+    window.addEventListener('DOMContentLoaded', async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session?.user) {
+        await verifyTeacher(session.user);
+      }
+
+      sb.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          await verifyTeacher(session.user);
+        }
+      });
+    });
+
+    async function signInWithGoogle() {
+      const btn = document.getElementById('googleLoginBtn');
+      btn.disabled = true;
+      btn.innerText = 'Redirecting to Google...';
+
+      const redirectUrl = window.location.origin + window.location.pathname;
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: redirectUrl }
+      });
+
+      if (error) {
+        showAlert('loginAlert', error.message, true);
+        btn.disabled = false;
+        btn.innerText = 'Sign in with Google';
+      }
+    }
+
+    async function verifyTeacher(user) {
+      const email = (user.email || '').toLowerCase().trim();
+      if (!TEACHER_EMAILS.includes(email)) {
+        showAlert('loginAlert', `Access denied for ${email}. Teacher account required.`, true);
+        await sb.auth.signOut();
+        return;
+      }
+
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('adminDashboard').classList.remove('hidden');
+      document.getElementById('headerControls').classList.remove('hidden');
+      await loadTeacherData();
+    }
+
+    async function logout() {
+      await sb.auth.signOut();
+      document.getElementById('adminDashboard').classList.add('hidden');
+      document.getElementById('headerControls').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+
+    async function loadTeacherData() {
+      const [studentsRes, holdingsRes, stocksRes, txRes] = await Promise.all([
+        sb.from('students').select('*').eq('classroom_id', CLASSROOM_ID),
+        sb.from('holdings').select('*'),
+        sb.from('stocks').select('ticker, live_price').eq('classroom_id', CLASSROOM_ID),
+        sb.from('transactions').select('*').order('created_at', { ascending: false }).limit(60)
+      ]);
+
+      const students = studentsRes.data || [];
+      const holdings = holdingsRes.data || [];
+      const stocks = stocksRes.data || [];
+      const transactions = txRes.data || [];
+
+      const priceMap = {};
+      stocks.forEach(s => { priceMap[s.ticker] = Number(s.live_price) || 0; });
+
+      const studentNameMap = {};
+      students.forEach(s => { studentNameMap[s.id] = s.name; });
+
+      // Build rankings
+      const board = students.map(st => {
+        const stHoldings = holdings.filter(h => h.student_id === st.id && Number(h.quantity) > 0);
+        const stockVal = stHoldings.reduce((sum, h) => sum + (Number(h.quantity) || 0) * (priceMap[h.ticker] || 0), 0);
+        const fixedVal = (Number(st.term_deposit) || 0) + (Number(st.savings) || 0) + (Number(st.bonds) || 0);
+        const cash = Number(st.cash) || 0;
+        const total = cash + fixedVal + stockVal;
+        return {
+          id: st.id,
+          name: st.name,
+          email: st.email,
+          cash,
+          investedAndFixed: stockVal + fixedVal,
+          total
+        };
+      });
+
+      board.sort((a, b) => b.total - a.total);
+      board.forEach((s, i) => s.rank = i + 1);
+      cachedBoard = board;
+
+      // Update KPI Stats
+      const classWorth = board.reduce((sum, s) => sum + s.total, 0);
+      document.getElementById('statStudents').innerText = board.length;
+      document.getElementById('statClassWorth').innerText = formatMoney(classWorth);
+      document.getElementById('statAvgWorth').innerText = board.length ? formatMoney(classWorth / board.length) : '$0.00';
+      document.getElementById('statStocks').innerText = stocks.length;
+
+      // Render Leaderboard Table
+      const tbody = document.getElementById('adminLeaderboard');
+      tbody.innerHTML = '';
+      if (board.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">No students found in this classroom.</td></tr>';
+      } else {
+        board.forEach(st => {
+          tbody.innerHTML += `
+            <tr>
+              <td><strong>#${st.rank}</strong></td>
+              <td>${st.name}<br><small style="color:#64748b;">${st.email || ''}</small></td>
+              <td>${formatMoney(st.cash)}</td>
+              <td>${formatMoney(st.investedAndFixed)}</td>
+              <td><strong>${formatMoney(st.total)}</strong></td>
+            </tr>`;
+        });
+      }
+
+      // Populate Adjust Cash dropdown
+      const sel = document.getElementById('adjustStudentSelect');
+      sel.innerHTML = '';
+      [...board].sort((a, b) => a.name.localeCompare(b.name)).forEach(st => {
+        const opt = document.createElement('option');
+        opt.value = st.id;
+        opt.innerText = `${st.name} (${formatMoney(st.cash)} cash)`;
+        sel.appendChild(opt);
+      });
+
+      // Render Transaction Logs
+      const logBody = document.getElementById('adminLogs');
+      logBody.innerHTML = '';
+      if (transactions.length === 0) {
+        logBody.innerHTML = '<tr><td colspan="4">No transactions logged yet.</td></tr>';
+      } else {
+        transactions.forEach(tx => {
+          const timeStr = tx.created_at ? new Date(tx.created_at).toLocaleString('en-NZ', { dateStyle: 'short', timeStyle: 'short' }) : '';
+          const studentName = studentNameMap[tx.student_id] || tx.student_name || 'Unknown';
+          const action = (tx.action || tx.type || 'TRADE').toUpperCase();
+          let badgeClass = 'badge-other';
           if (action === 'BUY') badgeClass = 'badge-buy';
           else if (action === 'SELL') badgeClass = 'badge-sell';
-          
-          try {
-             const parsed = JSON.parse(details);
-             if (parsed.ticker) {
-                details = parsed.ticker + ' | Val: ' + formatMoney(parsed.amountInvested || parsed.amountSold);
-             }
-          } catch(e) { }
 
-          tbody.innerHTML += '<tr><td style="font-size: 11px; color: #64748b;">' + date + '</td><td><strong>' + student + '</strong></td><td><span class="badge ' + badgeClass + '">' + action + '</span></td><td style="font-size: 11px;">' + details + '</td></tr>';
+          const ticker = tx.ticker || '';
+          const amt = tx.amount ?? tx.total_amount ?? tx.value ?? 0;
+          const details = tx.details || (ticker ? `${ticker} | Val: ${formatMoney(amt)}` : formatMoney(amt));
+
+          logBody.innerHTML += `
+            <tr>
+              <td style="font-size: 11px; color: #64748b;">${timeStr}</td>
+              <td><strong>${studentName}</strong></td>
+              <td><span class="badge ${badgeClass}">${action}</span></td>
+              <td style="font-size: 12px;">${details}</td>
+            </tr>`;
         });
-      }).getTransactionLogs();
+      }
     }
 
-    window.onload = loadTeacherData;
+    async function triggerPriceSync() {
+      const btn = document.getElementById('btnSyncPrices');
+      btn.disabled = true;
+      btn.innerText = 'Syncing 216 Stocks...';
+      showAlert('adminAlert', 'Running live Yahoo Finance price sync (this takes ~10-15 seconds)...', false);
+
+      try {
+        const { data, error } = await sb.functions.invoke('sync-prices');
+        if (error) throw error;
+        showAlert('adminAlert', 'Live stock prices synced successfully!');
+        await loadTeacherData();
+      } catch (err) {
+        showAlert('adminAlert', 'Sync failed: ' + (err.message || err), true);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Sync Live Prices Now';
+      }
+    }
+
+    async function recordDailySnapshot() {
+      const btn = document.getElementById('btnSnapshot');
+      btn.disabled = true;
+      const today = new Date().toISOString().slice(0, 10);
+
+      try {
+        await loadTeacherData();
+        const rows = cachedBoard.map(st => ({
+          classroom_id: CLASSROOM_ID,
+          student_id: st.id,
+          snapshot_date: today,
+          total_net_worth: Number(st.total.toFixed(2))
+        }));
+
+        // Remove any existing snapshot for today first so re-clicking updates cleanly
+        await sb.from('portfolio_history')
+          .delete()
+          .eq('classroom_id', CLASSROOM_ID)
+          .eq('snapshot_date', today);
+
+        const { error } = await sb.from('portfolio_history').insert(rows);
+        if (error) throw error;
+
+        showAlert('adminAlert', `Saved portfolio snapshots for ${rows.length} students (${today}).`);
+      } catch (err) {
+        showAlert('adminAlert', 'Snapshot failed: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function addStudent() {
+      const name = document.getElementById('newStudentName').value.trim();
+      const email = document.getElementById('newStudentEmail').value.trim().toLowerCase();
+      const cash = parseFloat(document.getElementById('newStudentCash').value);
+
+      if (!name || !email || isNaN(cash)) {
+        showAlert('adminAlert', 'Please enter a valid name, email, and starting cash.', true);
+        return;
+      }
+
+      const code = email.split('@')[0];
+      const { error } = await sb.from('students').insert({
+        classroom_id: CLASSROOM_ID,
+        name,
+        email,
+        student_code: code,
+        cash,
+        term_deposit: 0,
+        savings: 0,
+        bonds: 0
+      });
+
+      if (error) {
+        showAlert('adminAlert', 'Failed to add student: ' + error.message, true);
+        return;
+      }
+
+      document.getElementById('newStudentName').value = '';
+      document.getElementById('newStudentEmail').value = '';
+      showAlert('adminAlert', `Added ${name} (${email}) with ${formatMoney(cash)}.`);
+      await loadTeacherData();
+    }
+
+    async function adjustStudentCash() {
+      const studentId = document.getElementById('adjustStudentSelect').value;
+      const delta = parseFloat(document.getElementById('adjustAmount').value);
+
+      if (!studentId || isNaN(delta) || delta === 0) {
+        showAlert('adminAlert', 'Select a student and enter a non-zero adjustment amount.', true);
+        return;
+      }
+
+      const student = cachedBoard.find(s => s.id === studentId);
+      const newCash = Number(((student ? student.cash : 0) + delta).toFixed(2));
+
+      const { error } = await sb
+        .from('students')
+        .update({ cash: newCash })
+        .eq('id', studentId);
+
+      if (error) {
+        showAlert('adminAlert', 'Adjustment failed: ' + error.message, true);
+        return;
+      }
+
+      document.getElementById('adjustAmount').value = '';
+      showAlert('adminAlert', `Updated ${student.name}'s cash by ${delta >= 0 ? '+' : ''}${formatMoney(delta)} (New cash: ${formatMoney(newCash)}).`);
+      await loadTeacherData();
+    }
+
+    async function resetClassroom() {
+      const startCash = parseFloat(document.getElementById('resetCashAmount').value);
+      if (isNaN(startCash) || startCash < 0) {
+        showAlert('adminAlert', 'Enter a valid starting cash amount.', true);
+        return;
+      }
+
+      if (!confirm(`Reset ALL students in this classroom to ${formatMoney(startCash)} and delete all stock holdings?`)) {
+        return;
+      }
+
+      try {
+        const studentIds = cachedBoard.map(s => s.id);
+        if (studentIds.length > 0) {
+          const { error: hErr } = await sb.from('holdings').delete().in('student_id', studentIds);
+          if (hErr) throw hErr;
+        }
+
+        const { error: sErr } = await sb
+          .from('students')
+          .update({ cash: startCash, term_deposit: 0, savings: 0, bonds: 0 })
+          .eq('classroom_id', CLASSROOM_ID);
+        if (sErr) throw sErr;
+
+        showAlert('adminAlert', `Classroom reset! All students now have ${formatMoney(startCash)} liquid cash.`);
+        await loadTeacherData();
+      } catch (err) {
+        showAlert('adminAlert', 'Reset failed: ' + err.message, true);
+      }
+    }
   </script>
 </body>
 </html>
