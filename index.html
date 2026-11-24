@@ -14,10 +14,11 @@
     .container.podium-3 { border-top: 6px solid #d97706; }
 
     .brand-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #f0f4f8; padding-bottom: 15px; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-    .brand-logo-container { display: flex; align-items: center; gap: 12px; }
+    .brand-logo-container { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .brand-title { margin: 0; font-size: 20px; color: #102a43; font-weight: 700; letter-spacing: -0.5px; }
     .user-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .user-greeting { font-weight: 600; color: #334e68; font-size: 14px; }
+    .portfolio-switcher { padding: 6px 10px; border: 2px solid #2563eb; border-radius: 6px; font-weight: 700; color: #102a43; background: #eff6ff; font-size: 13px; width: auto; margin-top: 0; }
 
     /* Header Rank Badges */
     .rank-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 999px; font-size: 13px; font-weight: 700; background: #e2e8f0; color: #1e293b; border: 1px solid #cbd5e1; }
@@ -80,6 +81,7 @@
           <circle cx="15" cy="12" r="1" fill="currentColor"></circle>
         </svg>
         <h2 class="brand-title">SikmaWoolf Trading Terminal</h2>
+        <select id="portfolioSwitcher" class="portfolio-switcher hidden" onchange="switchPortfolio()"></select>
       </div>
       <div class="user-controls">
         <span id="headerUserGreeting" class="user-greeting hidden"></span>
@@ -245,9 +247,9 @@
   <script>
     const SUPABASE_URL = 'https://uwaslimqdgejkpknurku.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_B4UfRGUN4MpHDjOKzsNWwg_8hHDabmX';
-    const CLASSROOM_ID = 'af32c8ee-8808-499f-a014-2b7ee8a1a0ad';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    let myPortfolios = [];
     let currentStudent = null;
     let portfolioChartInstance = null;
     let allAvailableStocks = [];
@@ -268,7 +270,6 @@
       el.style.display = 'block';
     }
 
-    // Check session on page load & listen for Google OAuth redirect
     window.addEventListener('DOMContentLoaded', async () => {
       const { data: { session } } = await sb.auth.getSession();
       if (session?.user) {
@@ -303,35 +304,16 @@
     async function handleAuthenticatedUser(user) {
       const email = (user.email || '').toLowerCase().trim();
 
-      let { data: student, error } = await sb
-        .from('students')
-        .select('*')
-        .eq('auth_user_id', user.id)
-        .maybeSingle();
-
-      if (!student) {
-        const res = await sb
-          .from('students')
-          .select('*')
-          .ilike('email', email)
-          .maybeSingle();
-        student = res.data;
-        error = res.error;
-
-        if (student && !student.auth_user_id) {
-          await sb
-            .from('students')
-            .update({ auth_user_id: user.id })
-            .eq('id', student.id);
-          student.auth_user_id = user.id;
-        }
-      }
+      const [{ data: students, error }, { data: classes }] = await Promise.all([
+        sb.from('students').select('*').ilike('email', email),
+        sb.from('classroom_settings').select('classroom_id, class_name')
+      ]);
 
       if (error) {
         showAlert('loginAlert', 'Database error: ' + error.message, true);
         return;
       }
-      if (!student) {
+      if (!students || students.length === 0) {
         showAlert(
           'loginAlert',
           `No student account found for ${email}. Ask your teacher to check your registered email.`,
@@ -341,12 +323,41 @@
         return;
       }
 
-      currentStudent = student;
+      const classNameMap = {};
+      (classes || []).forEach(c => { classNameMap[c.classroom_id] = c.class_name || 'Class'; });
+
+      // Link auth_user_id on any unlinked rows
+      for (const st of students) {
+        if (!st.auth_user_id) {
+          await sb.from('students').update({ auth_user_id: user.id }).eq('id', st.id);
+          st.auth_user_id = user.id;
+        }
+        st._className = classNameMap[st.classroom_id] || 'Class';
+      }
+
+      myPortfolios = students;
+      currentStudent = myPortfolios[0];
+
+      const switcher = document.getElementById('portfolioSwitcher');
+      if (myPortfolios.length > 1) {
+        switcher.innerHTML = '';
+        myPortfolios.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.innerText = p._className;
+          switcher.appendChild(opt);
+        });
+        switcher.value = currentStudent.id;
+        switcher.classList.remove('hidden');
+      } else {
+        switcher.classList.add('hidden');
+      }
 
       const greeting = document.getElementById('headerUserGreeting');
-      greeting.innerText = 'Trader: ' + student.name;
+      greeting.innerText = 'Trader: ' + currentStudent.name;
       greeting.classList.remove('hidden');
-      document.getElementById('accountOverviewTitle').innerText = student.name + "'s Account";
+      document.getElementById('accountOverviewTitle').innerText =
+        `${currentStudent.name}'s Account (${currentStudent._className})`;
 
       document.getElementById('loginScreen').classList.add('hidden');
       document.getElementById('dashboardScreen').classList.remove('hidden');
@@ -355,8 +366,19 @@
       await refreshDashboard();
     }
 
+    async function switchPortfolio() {
+      const selectedId = document.getElementById('portfolioSwitcher').value;
+      const found = myPortfolios.find(p => p.id === selectedId);
+      if (!found) return;
+      currentStudent = found;
+      document.getElementById('accountOverviewTitle').innerText =
+        `${currentStudent.name}'s Account (${currentStudent._className})`;
+      await refreshDashboard();
+    }
+
     async function logout() {
       await sb.auth.signOut();
+      myPortfolios = [];
       currentStudent = null;
       allAvailableStocks = [];
       if (portfolioChartInstance) {
@@ -364,6 +386,7 @@
         portfolioChartInstance = null;
       }
       updateHeaderRank(null);
+      document.getElementById('portfolioSwitcher').classList.add('hidden');
       document.getElementById('headerUserGreeting').classList.add('hidden');
       document.getElementById('dashboardScreen').classList.add('hidden');
       document.getElementById('logoutBtn').classList.add('hidden');
@@ -403,22 +426,26 @@
 
     async function refreshDashboard() {
       if (!currentStudent) return;
+      const classId = currentStudent.classroom_id;
 
       const [studentRes, stocksRes, myHoldingsRes, classStudentsRes, allHoldingsRes, historyRes, ratesRes] = await Promise.all([
         sb.from('students').select('*').eq('id', currentStudent.id).single(),
-        sb.from('stocks').select('*').eq('classroom_id', CLASSROOM_ID).order('ticker'),
+        sb.from('stocks').select('*').eq('classroom_id', classId).order('ticker'),
         sb.from('holdings').select('*').eq('student_id', currentStudent.id),
-        sb.from('students').select('id, name, cash, term_deposit, savings, bonds, loan_balance').eq('classroom_id', CLASSROOM_ID),
+        sb.from('students').select('id, name, cash, term_deposit, savings, bonds, loan_balance').eq('classroom_id', classId),
         sb.from('holdings').select('student_id, ticker, quantity'),
         sb.from('portfolio_history').select('snapshot_date, total_net_worth').eq('student_id', currentStudent.id).order('snapshot_date'),
-        sb.from('classroom_settings').select('term_deposit_rate, savings_rate, bonds_rate, max_borrow_pct, borrow_rate').eq('classroom_id', CLASSROOM_ID).maybeSingle()
+        sb.from('classroom_settings').select('class_name, term_deposit_rate, savings_rate, bonds_rate, max_borrow_pct, borrow_rate').eq('classroom_id', classId).maybeSingle()
       ]);
 
-      if (studentRes.data) currentStudent = studentRes.data;
+      if (studentRes.data) {
+        const className = currentStudent._className;
+        currentStudent = studentRes.data;
+        currentStudent._className = ratesRes.data?.class_name || className;
+      }
       allAvailableStocks = stocksRes.data || [];
       const myHoldings = (myHoldingsRes.data || []).filter(h => Number(h.quantity) > 0);
 
-      // Build normalized maps (UPPERCASE TICKER -> live_price / company name)
       const priceMap = {};
       const stockNameMap = {};
       allAvailableStocks.forEach(s => {
@@ -427,7 +454,6 @@
         stockNameMap[key] = s.name || '';
       });
 
-      // Populate Market & Ticker dropdowns
       const marketSelect = document.getElementById('tradeMarket');
       const previousMarket = marketSelect.value;
       const uniqueMarkets = [...new Set(
@@ -446,7 +472,6 @@
       }
       filterTickersByMarket();
 
-      // Render Holdings & compute stock equity value consistently
       const tbody = document.getElementById('holdingsBody');
       tbody.innerHTML = '';
       let stockPortfolioValue = 0;
@@ -484,7 +509,6 @@
         });
       }
 
-      // Update Account Balances & Net Worth (Assets minus Loan Balance)
       const cash = Number(currentStudent.cash) || 0;
       const termDeposit = Number(currentStudent.term_deposit) || 0;
       const savings = Number(currentStudent.savings) || 0;
@@ -499,7 +523,6 @@
       document.getElementById('lblBorrowed').innerText = formatMoney(borrowed);
       document.getElementById('lblTotal').innerText = formatMoney(netWorth);
 
-      // Update Interest Rates & Available Credit Display
       const rates = ratesRes.data;
       if (rates) {
         const allocSel = document.getElementById('allocAccount');
@@ -517,10 +540,8 @@
         document.getElementById('lblAvailableCredit').value = formatMoney(availableCredit);
       }
 
-      // Render Historical Chart
       renderPortfolioChart(historyRes.data || [], netWorth);
 
-      // Compute & Render Class Leaderboard using exact same priceMap formula
       const allStudents = classStudentsRes.data || [];
       const allHoldings = allHoldingsRes.data || [];
 
@@ -737,7 +758,7 @@
           if (cErr) throw cErr;
 
           await sb.from('transactions').insert({
-            classroom_id: CLASSROOM_ID,
+            classroom_id: currentStudent.classroom_id,
             student_id: currentStudent.id,
             ticker,
             action: 'BUY',
@@ -780,7 +801,7 @@
           if (cErr) throw cErr;
 
           await sb.from('transactions').insert({
-            classroom_id: CLASSROOM_ID,
+            classroom_id: currentStudent.classroom_id,
             student_id: currentStudent.id,
             ticker,
             action: 'SELL',
@@ -845,7 +866,7 @@
 
         const label = column.replace('_', ' ');
         await sb.from('transactions').insert({
-          classroom_id: CLASSROOM_ID,
+          classroom_id: currentStudent.classroom_id,
           student_id: currentStudent.id,
           action,
           amount,
@@ -881,8 +902,8 @@
         const [{ data: fresh }, { data: holdings }, { data: stocks }, { data: settings }] = await Promise.all([
           sb.from('students').select('cash, term_deposit, savings, bonds, loan_balance').eq('id', currentStudent.id).single(),
           sb.from('holdings').select('ticker, quantity').eq('student_id', currentStudent.id),
-          sb.from('stocks').select('ticker, live_price').eq('classroom_id', CLASSROOM_ID),
-          sb.from('classroom_settings').select('max_borrow_pct').eq('classroom_id', CLASSROOM_ID).single()
+          sb.from('stocks').select('ticker, live_price').eq('classroom_id', currentStudent.classroom_id),
+          sb.from('classroom_settings').select('max_borrow_pct').eq('classroom_id', currentStudent.classroom_id).single()
         ]);
 
         const priceMap = {};
@@ -918,7 +939,7 @@
         if (error) throw error;
 
         await sb.from('transactions').insert({
-          classroom_id: CLASSROOM_ID,
+          classroom_id: currentStudent.classroom_id,
           student_id: currentStudent.id,
           action,
           amount,
