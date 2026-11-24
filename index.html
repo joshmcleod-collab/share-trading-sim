@@ -2,7 +2,10 @@
 <html>
 <head>
   <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SikmaWoolf Trading Terminal</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f4f8; color: #102a43; }
     .container { max-width: 1000px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(16,42,67,0.08); border-top: 5px solid #102a43; transition: border-top-color 0.3s ease; }
@@ -34,10 +37,8 @@
     button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; background: #102a43; color: white; font-weight: 600; transition: background 0.2s; }
     button:hover { background: #243b53; }
     button:disabled { background: #9fb3c8; cursor: not-allowed; }
-    .btn-secondary { background: #e2e8f0; color: #102a43; }
-    .btn-secondary:hover { background: #cbd5e1; }
-    .btn-link { background: none; color: #2563eb; padding: 6px 0; font-size: 13px; text-decoration: underline; }
-    .btn-link:hover { background: none; color: #1d4ed8; }
+    .btn-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 12px 16px; background: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; font-size: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .btn-google:hover { background: #f8fafc; border-color: #94a3b8; }
     .btn-sell { background: #dc2626; }
     .btn-sell:hover { background: #b91c1c; }
     .btn-buy { background: #16a34a; }
@@ -84,60 +85,30 @@
       </div>
     </div>
 
-    <!-- LOGIN & CHANGE PASSWORD CARD -->
-    <div id="loginScreen" class="card" style="max-width: 400px; margin: 40px auto;">
-      
-      <!-- Standard Login Form -->
-      <div id="loginFormSection">
-        <h3 style="margin-top: 0;">Student Login</h3>
-        <div id="loginAlert" class="alert alert-error"></div>
-        <div class="form-group">
-          <label>Student ID</label>
-          <input type="text" id="studentId" placeholder="Enter your Student ID">
-        </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="studentPassword" placeholder="Enter your password">
-        </div>
-        <button id="loginBtn" onclick="attemptLogin()" style="width: 100%;">Access Terminal</button>
-        <div style="text-align: center; margin-top: 10px;">
-          <button type="button" class="btn-link" onclick="togglePasswordView(true)">Change Password</button>
-        </div>
-      </div>
-
-      <!-- Change Password Form -->
-      <div id="changePasswordSection" class="hidden">
-        <h3 style="margin-top: 0;">Change Password</h3>
-        <div id="cpAlert" class="alert"></div>
-        <div class="form-group">
-          <label>Student ID</label>
-          <input type="text" id="cpStudentId" placeholder="Enter your Student ID">
-        </div>
-        <div class="form-group">
-          <label>Current Password</label>
-          <input type="password" id="cpOldPassword" placeholder="Enter current password">
-        </div>
-        <div class="form-group">
-          <label>New Password</label>
-          <input type="password" id="cpNewPassword" placeholder="Min. 6 characters">
-        </div>
-        <div class="form-group">
-          <label>Confirm New Password</label>
-          <input type="password" id="cpConfirmPassword" placeholder="Re-enter new password">
-        </div>
-        <div style="display: flex; gap: 10px;">
-          <button type="button" id="cpSaveBtn" class="btn-buy" style="flex: 1;" onclick="submitPasswordChange()">Update Password</button>
-          <button type="button" class="btn-secondary" onclick="togglePasswordView(false)">Cancel</button>
-        </div>
-      </div>
-
+    <!-- GOOGLE OAUTH LOGIN CARD -->
+    <div id="loginScreen" class="card" style="max-width: 420px; margin: 40px auto; text-align: center;">
+      <h3 style="margin-top: 0;">Student Login</h3>
+      <p style="color: #486581; font-size: 14px; margin-bottom: 20px;">
+        Sign in with your school Google account to access your portfolio.
+      </p>
+      <div id="loginAlert" class="alert alert-error" style="text-align: left;"></div>
+      <button id="googleLoginBtn" class="btn-google" onclick="signInWithGoogle()">
+        <svg width="18" height="18" viewBox="0 0 48 48">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Sign in with Google
+      </button>
     </div>
 
+    <!-- DASHBOARD -->
     <div id="dashboardScreen" class="hidden">
       <div class="dashboard-grid">
         <div class="card">
           <h3 style="margin-top: 0;" id="accountOverviewTitle">Account Overview</h3>
-          <p style="margin-bottom: 10px;">Liquid Cash: <br><span class="stat-highlight" id="lblCash">$0.00</span></p>
+          <p style="margin-bottom: 10px;">Liquid Cash (NZD): <br><span class="stat-highlight" id="lblCash">$0.00</span></p>
           
           <div class="sub-balances">
             <div>Term Deposit<br><span id="lblTermDeposit">$0.00</span></div>
@@ -145,7 +116,7 @@
             <div>Bonds<br><span id="lblBonds">$0.00</span></div>
           </div>
 
-          <p style="margin-bottom: 0;">Net Portfolio Value: <br><span class="stat-highlight" id="lblTotal">$0.00</span></p>
+          <p style="margin-bottom: 0;">Net Portfolio Value (NZD): <br><span class="stat-highlight" id="lblTotal">$0.00</span></p>
         </div>
         
         <div class="card">
@@ -172,8 +143,8 @@
           </div>
 
           <div class="form-group">
-            <label>Trade Amount ($)</label>
-            <input type="number" id="tradeAmount" min="1" step="0.01" placeholder="e.g. 10.00">
+            <label>Trade Amount (NZD $)</label>
+            <input type="number" id="tradeAmount" min="1" step="0.01" placeholder="e.g. 50.00">
           </div>
           <div style="display: flex; gap: 10px;">
             <button id="btnBuy" class="btn-buy" style="flex: 1;" onclick="executeTrade('BUY')">BUY</button>
@@ -190,13 +161,13 @@
           <div class="form-group" style="margin-bottom: 0;">
             <label>Account Type</label>
             <select id="allocAccount">
-              <option value="SAVINGS">Savings Account</option>
-              <option value="TERM_DEPOSIT">Term Deposit</option>
-              <option value="BONDS">Government / Corporate Bonds</option>
+              <option value="savings">Savings Account</option>
+              <option value="term_deposit">Term Deposit</option>
+              <option value="bonds">Government / Corporate Bonds</option>
             </select>
           </div>
           <div class="form-group" style="margin-bottom: 0;">
-            <label>Amount ($)</label>
+            <label>Amount (NZD $)</label>
             <input type="number" id="allocAmount" min="1" step="0.01" placeholder="e.g. 50.00">
           </div>
           <div style="display: flex; gap: 8px;">
@@ -243,8 +214,12 @@
   </div>
 
   <script>
-    let currentStudentId = null;
-    let currentStudentName = null;
+    const SUPABASE_URL = 'https://yuntflucuqbarhmjblqy.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_B4UfRGUN4MpHDjOKzsNWwg_8hHDabmX';
+    const CLASSROOM_ID = 'af32c8ee-8808-499f-a014-2b7ee8a1a0ad';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentStudent = null;
     let portfolioChartInstance = null;
     let allAvailableStocks = [];
 
@@ -253,13 +228,111 @@
       return '$' + (isNaN(val) ? '0.00' : val.toFixed(2));
     }
 
-    function updateAccountBalances(data) {
-      if (!data) return;
-      document.getElementById('lblCash').innerText = formatMoney(data.cash);
-      document.getElementById('lblTermDeposit').innerText = formatMoney(data.termDeposit || 0);
-      document.getElementById('lblSavings').innerText = formatMoney(data.savings || 0);
-      document.getElementById('lblBonds').innerText = formatMoney(data.bonds || 0);
-      document.getElementById('lblTotal').innerText = formatMoney(data.total);
+    function showAlert(id, msg, isError = false) {
+      const el = document.getElementById(id);
+      el.innerText = msg;
+      el.className = isError ? 'alert alert-error' : 'alert';
+      el.style.display = 'block';
+    }
+
+    // Check session on page load & listen for Google OAuth redirect
+    window.addEventListener('DOMContentLoaded', async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session?.user) {
+        await handleAuthenticatedUser(session.user);
+      }
+
+      sb.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user && !currentStudent) {
+          await handleAuthenticatedUser(session.user);
+        }
+      });
+    });
+
+    async function signInWithGoogle() {
+      const btn = document.getElementById('googleLoginBtn');
+      btn.disabled = true;
+      btn.innerText = 'Redirecting to Google...';
+
+      const redirectUrl = window.location.origin + window.location.pathname;
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: redirectUrl }
+      });
+
+      if (error) {
+        showAlert('loginAlert', error.message, true);
+        btn.disabled = false;
+        btn.innerText = 'Sign in with Google';
+      }
+    }
+
+    async function handleAuthenticatedUser(user) {
+      const email = (user.email || '').toLowerCase().trim();
+
+      // Find student by auth_user_id first, fallback to email match
+      let { data: student, error } = await sb
+        .from('students')
+        .select('*')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+
+      if (!student) {
+        const res = await sb
+          .from('students')
+          .select('*')
+          .ilike('email', email)
+          .maybeSingle();
+        student = res.data;
+        error = res.error;
+
+        // Link auth_user_id on first login
+        if (student && !student.auth_user_id) {
+          await sb
+            .from('students')
+            .update({ auth_user_id: user.id })
+            .eq('id', student.id);
+          student.auth_user_id = user.id;
+        }
+      }
+
+      if (error || !student) {
+        showAlert(
+          'loginAlert',
+          `No student account found for ${email}. Ask your teacher to check your registered email.`,
+          true
+        );
+        await sb.auth.signOut();
+        return;
+      }
+
+      currentStudent = student;
+
+      const greeting = document.getElementById('headerUserGreeting');
+      greeting.innerText = 'Trader: ' + student.name;
+      greeting.classList.remove('hidden');
+      document.getElementById('accountOverviewTitle').innerText = student.name + "'s Account";
+
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('dashboardScreen').classList.remove('hidden');
+      document.getElementById('logoutBtn').classList.remove('hidden');
+
+      await refreshDashboard();
+    }
+
+    async function logout() {
+      await sb.auth.signOut();
+      currentStudent = null;
+      allAvailableStocks = [];
+      if (portfolioChartInstance) {
+        portfolioChartInstance.destroy();
+        portfolioChartInstance = null;
+      }
+      updateHeaderRank(null);
+      document.getElementById('headerUserGreeting').classList.add('hidden');
+      document.getElementById('dashboardScreen').classList.add('hidden');
+      document.getElementById('logoutBtn').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
     }
 
     function updateHeaderRank(rank, totalStudents) {
@@ -293,358 +366,200 @@
       badge.classList.remove('hidden');
     }
 
-    function renderPortfolioChart(currentNetWorth) {
-      const safeNetWorth = Number(currentNetWorth) || 0;
-      if (!currentStudentName) return;
+    async function refreshDashboard() {
+      if (!currentStudent) return;
 
-      google.script.run
-        .withSuccessHandler(history => {
-          const canvas = document.getElementById('portfolioChart');
-          if (!canvas) return;
-          const ctx = canvas.getContext('2d');
+      // 1. Fetch fresh student balances, stocks, student holdings, all classroom students & holdings
+      const [studentRes, stocksRes, myHoldingsRes, classStudentsRes, allHoldingsRes, historyRes] = await Promise.all([
+        sb.from('students').select('*').eq('id', currentStudent.id).single(),
+        sb.from('stocks').select('*').eq('classroom_id', CLASSROOM_ID).order('ticker'),
+        sb.from('holdings').select('*').eq('student_id', currentStudent.id),
+        sb.from('students').select('id, name, cash, term_deposit, savings, bonds').eq('classroom_id', CLASSROOM_ID),
+        sb.from('holdings').select('student_id, ticker, quantity'),
+        sb.from('portfolio_history').select('snapshot_date, total_net_worth').eq('student_id', currentStudent.id).order('snapshot_date')
+      ]);
 
-          if (portfolioChartInstance) {
-            portfolioChartInstance.destroy();
-          }
+      if (studentRes.data) currentStudent = studentRes.data;
+      allAvailableStocks = stocksRes.data || [];
+      const myHoldings = (myHoldingsRes.data || []).filter(h => Number(h.quantity) > 0);
 
-          let labels = (history && Array.isArray(history.labels)) ? [...history.labels] : [];
-          let values = (history && Array.isArray(history.values)) ? history.values.map(v => Number(v) || 0) : [];
+      // Build price map (ticker -> live_price)
+      const priceMap = {};
+      allAvailableStocks.forEach(s => {
+        priceMap[s.ticker] = Number(s.live_price) || 0;
+      });
 
-          // Fallback if no snapshots exist yet, or append live "Now" point if net worth changed since last snapshot
-          if (labels.length === 0) {
-            labels = ['Today'];
-            values = [+safeNetWorth.toFixed(2)];
-          } else {
-            const lastLogged = values[values.length - 1];
-            if (Math.abs(lastLogged - safeNetWorth) >= 0.01) {
-              labels.push('Live');
-              values.push(+safeNetWorth.toFixed(2));
-            }
-          }
+      // 2. Populate Market & Ticker dropdowns
+      const marketSelect = document.getElementById('tradeMarket');
+      const previousMarket = marketSelect.value;
+      const uniqueMarkets = [...new Set(
+        allAvailableStocks.map(s => s.market_type).filter(m => m && String(m).trim() !== '')
+      )];
 
-          portfolioChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels: labels,
-              datasets: [{
-                label: 'Net Portfolio Value ($)',
-                data: values,
-                borderColor: '#16a34a',
-                backgroundColor: 'rgba(22, 163, 74, 0.12)',
-                borderWidth: 2.5,
-                pointBackgroundColor: '#102a43',
-                pointRadius: 4,
-                fill: true,
-                tension: 0.35
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: { display: false },
-                tooltip: {
-                  callbacks: {
-                    label: function(context) {
-                      return 'Net Worth: $' + context.parsed.y.toFixed(2);
-                    }
-                  }
-                }
-              },
-              scales: {
-                y: {
-                  beginAtZero: false,
-                  ticks: {
-                    callback: function(value) {
-                      return '$' + Number(value).toFixed(2);
-                    }
-                  },
-                  grid: { color: '#e2e8f0' }
-                },
-                x: {
-                  grid: { display: false }
-                }
-              }
-            }
-          });
-        })
-        .getPortfolioHistory(currentStudentName);
-    }
+      marketSelect.innerHTML = '';
+      uniqueMarkets.forEach(market => {
+        const opt = document.createElement('option');
+        opt.value = market;
+        opt.innerText = market.replace(/_/g, ' ');
+        marketSelect.appendChild(opt);
+      });
+      if (previousMarket && uniqueMarkets.includes(previousMarket)) {
+        marketSelect.value = previousMarket;
+      }
+      filterTickersByMarket();
 
-    function togglePasswordView(showChangeForm) {
-      const loginSection = document.getElementById('loginFormSection');
-      const cpSection = document.getElementById('changePasswordSection');
-      const cpAlert = document.getElementById('cpAlert');
-      const loginAlert = document.getElementById('loginAlert');
+      // 3. Render Holdings & compute stock equity value
+      const tbody = document.getElementById('holdingsBody');
+      tbody.innerHTML = '';
+      let stockPortfolioValue = 0;
 
-      loginAlert.style.display = 'none';
-      cpAlert.style.display = 'none';
-
-      if (showChangeForm) {
-        const typedId = document.getElementById('studentId').value.trim();
-        if (typedId) {
-          document.getElementById('cpStudentId').value = typedId;
-        }
-        loginSection.classList.add('hidden');
-        cpSection.classList.remove('hidden');
+      if (myHoldings.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4">No holdings yet.</td></tr>';
       } else {
-        cpSection.classList.add('hidden');
-        loginSection.classList.remove('hidden');
+        myHoldings.forEach(h => {
+          const qty = Number(h.quantity) || 0;
+          const avg = Number(h.avg_price) || 0;
+          const currentPrice = priceMap[h.ticker] || avg;
+
+          const invested = avg * qty;
+          const currentValue = currentPrice * qty;
+          const profitLoss = currentValue - invested;
+          stockPortfolioValue += currentValue;
+
+          let arrow = '—', color = '#64748b', sign = '';
+          if (profitLoss > 0.005) { arrow = '▲'; color = '#16a34a'; sign = '+'; }
+          else if (profitLoss < -0.005) { arrow = '▼'; color = '#dc2626'; sign = '-'; }
+
+          tbody.innerHTML += `
+            <tr>
+              <td><strong>${h.ticker}</strong><br><small style="color:#64748b;">${qty.toFixed(4)} sh</small></td>
+              <td>${formatMoney(invested)}</td>
+              <td>${formatMoney(currentValue)}</td>
+              <td style="color:${color}; font-weight:700;">${arrow} ${sign}$${Math.abs(profitLoss).toFixed(2)}</td>
+            </tr>`;
+        });
       }
+
+      // 4. Update Account Balances & Net Worth
+      const cash = Number(currentStudent.cash) || 0;
+      const termDeposit = Number(currentStudent.term_deposit) || 0;
+      const savings = Number(currentStudent.savings) || 0;
+      const bonds = Number(currentStudent.bonds) || 0;
+      const netWorth = cash + termDeposit + savings + bonds + stockPortfolioValue;
+
+      document.getElementById('lblCash').innerText = formatMoney(cash);
+      document.getElementById('lblTermDeposit').innerText = formatMoney(termDeposit);
+      document.getElementById('lblSavings').innerText = formatMoney(savings);
+      document.getElementById('lblBonds').innerText = formatMoney(bonds);
+      document.getElementById('lblTotal').innerText = formatMoney(netWorth);
+
+      // 5. Render Historical Chart
+      renderPortfolioChart(historyRes.data || [], netWorth);
+
+      // 6. Compute & Render Class Leaderboard
+      const allStudents = classStudentsRes.data || [];
+      const allHoldings = allHoldingsRes.data || [];
+
+      const board = allStudents.map(st => {
+        const stHoldings = allHoldings.filter(h => h.student_id === st.id && Number(h.quantity) > 0);
+        const stStockVal = stHoldings.reduce((sum, h) => {
+          return sum + (Number(h.quantity) || 0) * (priceMap[h.ticker] || 0);
+        }, 0);
+        const total = (Number(st.cash) || 0) +
+                      (Number(st.term_deposit) || 0) +
+                      (Number(st.savings) || 0) +
+                      (Number(st.bonds) || 0) +
+                      stStockVal;
+        return { id: st.id, name: st.name, total };
+      });
+
+      board.sort((a, b) => b.total - a.total);
+      board.forEach((entry, idx) => entry.rank = idx + 1);
+
+      const me = board.find(s => s.id === currentStudent.id);
+      updateHeaderRank(me ? me.rank : null, board.length);
+
+      const lbBody = document.getElementById('leaderboardBody');
+      lbBody.innerHTML = '';
+      board.forEach(student => {
+        const isMe = student.id === currentStudent.id;
+        let rowClass = '';
+        let rankDisplay = '#' + student.rank;
+
+        if (student.rank === 1) { rowClass = 'lb-rank-1'; rankDisplay = '🥇 #1'; }
+        else if (student.rank === 2) { rowClass = 'lb-rank-2'; rankDisplay = '🥈 #2'; }
+        else if (student.rank === 3) { rowClass = 'lb-rank-3'; rankDisplay = '🥉 #3'; }
+        if (isMe) rowClass += (rowClass ? ' ' : '') + 'lb-current-user';
+
+        lbBody.innerHTML += `
+          <tr class="${rowClass}">
+            <td>${rankDisplay}</td>
+            <td>${student.name}${isMe ? ' (You)' : ''}</td>
+            <td>${formatMoney(student.total)}</td>
+          </tr>`;
+      });
     }
 
-    function submitPasswordChange() {
-      const studId = document.getElementById('cpStudentId').value.trim();
-      const oldPass = document.getElementById('cpOldPassword').value.trim();
-      const newPass = document.getElementById('cpNewPassword').value.trim();
-      const confirmPass = document.getElementById('cpConfirmPassword').value.trim();
-      const cpAlert = document.getElementById('cpAlert');
-      const btn = document.getElementById('cpSaveBtn');
+    function renderPortfolioChart(historyRows, currentNetWorth) {
+      const canvas = document.getElementById('portfolioChart');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
 
-      if (!studId || !oldPass || !newPass || !confirmPass) {
-        cpAlert.innerText = "Please fill in all fields.";
-        cpAlert.className = "alert alert-error";
-        cpAlert.style.display = "block";
-        return;
-      }
-
-      if (newPass.length < 6) {
-        cpAlert.innerText = "New password must be at least 6 characters.";
-        cpAlert.className = "alert alert-error";
-        cpAlert.style.display = "block";
-        return;
-      }
-
-      if (newPass !== confirmPass) {
-        cpAlert.innerText = "New passwords do not match.";
-        cpAlert.className = "alert alert-error";
-        cpAlert.style.display = "block";
-        return;
-      }
-
-      btn.disabled = true;
-      btn.innerText = "Encrypting...";
-      cpAlert.style.display = "none";
-
-      google.script.run
-        .withSuccessHandler(res => {
-          btn.disabled = false;
-          btn.innerText = "Update Password";
-
-          if (res && res.success) {
-            document.getElementById('cpOldPassword').value = '';
-            document.getElementById('cpNewPassword').value = '';
-            document.getElementById('cpConfirmPassword').value = '';
-            document.getElementById('studentId').value = studId;
-            document.getElementById('studentPassword').value = '';
-
-            togglePasswordView(false);
-            const loginAlert = document.getElementById('loginAlert');
-            loginAlert.innerText = res.message || "Password updated! Please log in with your new password.";
-            loginAlert.className = "alert";
-            loginAlert.style.display = "block";
-          } else {
-            cpAlert.innerText = (res && res.error) ? res.error : "Could not update password.";
-            cpAlert.className = "alert alert-error";
-            cpAlert.style.display = "block";
-          }
-        })
-        .withFailureHandler(err => {
-          btn.disabled = false;
-          btn.innerText = "Update Password";
-          cpAlert.innerText = "Server error. Please try again.";
-          cpAlert.className = "alert alert-error";
-          cpAlert.style.display = "block";
-        })
-        .changeStudentPassword(studId, oldPass, newPass);
-    }
-
-    function attemptLogin() {
-      const studId = document.getElementById('studentId').value.trim();
-      const pass = document.getElementById('studentPassword').value.trim();
-      const btn = document.getElementById('loginBtn');
-      const alertBox = document.getElementById('loginAlert');
-      
-      if (!studId || !pass) return;
-      
-      btn.disabled = true;
-      btn.innerText = "Authenticating...";
-      alertBox.style.display = "none";
-      alertBox.className = "alert alert-error";
-      
-      google.script.run
-        .withSuccessHandler(res => {
-          if (res && res.success) {
-            currentStudentId = res.data.studentId;
-            currentStudentName = res.data.name;
-            
-            updateAccountBalances(res.data);
-
-            const greeting = document.getElementById('headerUserGreeting');
-            greeting.innerText = "Trader: " + currentStudentName;
-            greeting.classList.remove('hidden');
-            document.getElementById('accountOverviewTitle').innerText = currentStudentName + "'s Account";
-
-            document.getElementById('loginScreen').classList.add('hidden');
-            document.getElementById('dashboardScreen').classList.remove('hidden');
-            document.getElementById('logoutBtn').classList.remove('hidden');
-
-            renderPortfolioChart(res.data.total);
-            refreshDashboard();
-          } else {
-            alertBox.innerText = (res && res.error) ? res.error : "Login failed.";
-            alertBox.className = "alert alert-error";
-            alertBox.style.display = "block";
-            btn.disabled = false;
-            btn.innerText = "Access Terminal";
-          }
-        })
-        .withFailureHandler(err => {
-          alertBox.innerText = "Server error. Please try again.";
-          alertBox.className = "alert alert-error";
-          alertBox.style.display = "block";
-          btn.disabled = false;
-          btn.innerText = "Access Terminal";
-        })
-        .authenticateStudent(studId, pass);
-    }
-
-    function logout() {
-      currentStudentId = null;
-      currentStudentName = null;
-      allAvailableStocks = [];
       if (portfolioChartInstance) {
         portfolioChartInstance.destroy();
-        portfolioChartInstance = null;
       }
-      updateHeaderRank(null);
-      document.getElementById('studentPassword').value = '';
-      document.getElementById('loginAlert').style.display = 'none';
-      document.getElementById('headerUserGreeting').classList.add('hidden');
-      document.getElementById('headerUserGreeting').innerText = '';
-      document.getElementById('dashboardScreen').classList.add('hidden');
-      document.getElementById('logoutBtn').classList.add('hidden');
-      document.getElementById('loginScreen').classList.remove('hidden');
-      togglePasswordView(false);
-      document.getElementById('loginBtn').disabled = false;
-      document.getElementById('loginBtn').innerText = "Access Terminal";
-    }
 
-    function refreshDashboard() {
-      google.script.run.withSuccessHandler(data => {
-        if (data) {
-          updateAccountBalances(data);
-          renderPortfolioChart(data.total);
+      let labels = historyRows.map(r => r.snapshot_date);
+      let values = historyRows.map(r => Number(r.total_net_worth) || 0);
+
+      if (labels.length === 0) {
+        labels = ['Today'];
+        values = [+currentNetWorth.toFixed(2)];
+      } else {
+        const lastLogged = values[values.length - 1];
+        if (Math.abs(lastLogged - currentNetWorth) >= 0.01) {
+          labels.push('Live');
+          values.push(+currentNetWorth.toFixed(2));
         }
-      }).getStudentDataById(currentStudentId);
+      }
 
-      google.script.run.withSuccessHandler(stocks => {
-        allAvailableStocks = stocks || [];
-        const marketSelect = document.getElementById('tradeMarket');
-        const previousMarket = marketSelect.value;
-
-        const uniqueMarkets = [...new Set(
-          allAvailableStocks
-            .map(s => s.marketType)
-            .filter(m => m && String(m).trim() !== '')
-        )];
-
-        marketSelect.innerHTML = '';
-        uniqueMarkets.forEach(market => {
-          const opt = document.createElement('option');
-          opt.value = market;
-          opt.innerText = market.replace(/_/g, ' ');
-          marketSelect.appendChild(opt);
-        });
-
-        if (previousMarket && uniqueMarkets.includes(previousMarket)) {
-          marketSelect.value = previousMarket;
-        }
-
-        filterTickersByMarket();
-
-        google.script.run.withSuccessHandler(holdings => {
-          const tbody = document.getElementById('holdingsBody');
-          tbody.innerHTML = '';
-          const activeHoldings = (holdings || []).filter(h => h.quantity > 0);
-          if (activeHoldings.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4">No holdings yet.</td></tr>';
-            return;
-          }
-
-          activeHoldings.forEach(h => {
-            const stock = allAvailableStocks.find(s => s.ticker === h.ticker && s.price > 0)
-                       || allAvailableStocks.find(s => s.ticker === h.ticker);
-            const currentPrice = stock ? stock.price : h.avgPrice;
-
-            const invested = h.avgPrice * h.quantity;
-            const currentValue = currentPrice * h.quantity;
-            const profitLoss = currentValue - invested;
-
-            let arrow = '—';
-            let color = '#64748b';
-            let sign = '';
-
-            if (profitLoss > 0.005) {
-              arrow = '▲';
-              color = '#16a34a';
-              sign = '+';
-            } else if (profitLoss < -0.005) {
-              arrow = '▼';
-              color = '#dc2626';
-              sign = '-';
+      portfolioChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Net Portfolio Value (NZD)',
+            data: values,
+            borderColor: '#16a34a',
+            backgroundColor: 'rgba(22, 163, 74, 0.12)',
+            borderWidth: 2.5,
+            pointBackgroundColor: '#102a43',
+            pointRadius: 4,
+            fill: true,
+            tension: 0.35
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (c) => 'Net Worth: $' + c.parsed.y.toFixed(2)
+              }
             }
-
-            const plFormatted = sign + '$' + Math.abs(profitLoss).toFixed(2);
-
-            tbody.innerHTML +=
-              '<tr>' +
-                '<td><strong>' + h.ticker + '</strong></td>' +
-                '<td>' + formatMoney(invested) + '</td>' +
-                '<td>' + formatMoney(currentValue) + '</td>' +
-                '<td style="color: ' + color + '; font-weight: 700;">' + arrow + ' ' + plFormatted + '</td>' +
-              '</tr>';
-          });
-        }).getStudentHoldings(currentStudentId);
-
-      }).getAvailableStocks();
-
-      google.script.run.withSuccessHandler(board => {
-        const tbody = document.getElementById('leaderboardBody');
-        tbody.innerHTML = '';
-        const list = board || [];
-
-        const me = list.find(s => String(s.studentId).trim().toLowerCase() === String(currentStudentId).trim().toLowerCase());
-        updateHeaderRank(me ? me.rank : null, list.length);
-
-        list.forEach(student => {
-          const isMe = String(student.studentId).trim().toLowerCase() === String(currentStudentId).trim().toLowerCase();
-          let rowClass = '';
-          let rankDisplay = '#' + student.rank;
-
-          if (student.rank === 1) {
-            rowClass = 'lb-rank-1';
-            rankDisplay = '🥇 #1';
-          } else if (student.rank === 2) {
-            rowClass = 'lb-rank-2';
-            rankDisplay = '🥈 #2';
-          } else if (student.rank === 3) {
-            rowClass = 'lb-rank-3';
-            rankDisplay = '🥉 #3';
+          },
+          scales: {
+            y: {
+              beginAtZero: false,
+              ticks: { callback: (v) => '$' + Number(v).toFixed(2) },
+              grid: { color: '#e2e8f0' }
+            },
+            x: { grid: { display: false } }
           }
-
-          if (isMe) {
-            rowClass += (rowClass ? ' ' : '') + 'lb-current-user';
-          }
-
-          tbody.innerHTML +=
-            '<tr class="' + rowClass + '">' +
-              '<td>' + rankDisplay + '</td>' +
-              '<td>' + student.name + (isMe ? ' (You)' : '') + '</td>' +
-              '<td>' + formatMoney(student.total) + '</td>' +
-            '</tr>';
-        });
-      }).getLeaderboard();
+        }
+      });
     }
 
     function filterTickersByMarket() {
@@ -652,14 +567,14 @@
       const tickerSelect = document.getElementById('tradeTicker');
       const previousTicker = tickerSelect.value;
 
-      const filteredStocks = allAvailableStocks.filter(s => s.marketType === selectedMarket);
+      const filteredStocks = allAvailableStocks.filter(s => s.market_type === selectedMarket);
 
       tickerSelect.innerHTML = '';
       filteredStocks.forEach(stock => {
         const opt = document.createElement('option');
         opt.value = stock.ticker;
         opt.dataset.url = stock.url || '';
-        opt.innerText = stock.ticker + ' - ' + stock.name + ' (' + formatMoney(stock.price) + ' Locked Cl)';
+        opt.innerText = `${stock.ticker} - ${stock.name} (${formatMoney(stock.live_price)} NZD)`;
         tickerSelect.appendChild(opt);
       });
 
@@ -690,74 +605,171 @@
       }
     }
 
-    function executeTrade(action) {
+    async function executeTrade(action) {
       const ticker = document.getElementById('tradeTicker').value;
-      const amount = document.getElementById('tradeAmount').value;
-      const alertBox = document.getElementById('tradeAlert');
+      const amount = parseFloat(document.getElementById('tradeAmount').value);
       const btnBuy = document.getElementById('btnBuy');
       const btnSell = document.getElementById('btnSell');
-      
-      if (!ticker || !amount || amount <= 0) return;
+
+      if (!ticker || isNaN(amount) || amount <= 0) {
+        showAlert('tradeAlert', 'Enter a valid dollar amount.', true);
+        return;
+      }
+
+      const stock = allAvailableStocks.find(s => s.ticker === ticker);
+      const price = stock ? Number(stock.live_price) : 0;
+      if (!price || price <= 0) {
+        showAlert('tradeAlert', 'Live price unavailable for this stock.', true);
+        return;
+      }
 
       btnBuy.disabled = true;
       btnSell.disabled = true;
-      alertBox.style.display = "block";
-      alertBox.className = "alert";
-      alertBox.innerText = "Processing trade in the market... please wait.";
+      showAlert('tradeAlert', 'Processing trade...', false);
 
-      google.script.run
-        .withSuccessHandler(res => {
-          alertBox.innerText = res.message || res.error;
-          alertBox.className = res.success ? "alert" : "alert alert-error";
-          btnBuy.disabled = false;
-          btnSell.disabled = false;
-          if (res.success) {
-            document.getElementById('tradeAmount').value = '';
-            refreshDashboard();
+      try {
+        // Re-fetch latest cash & holding to prevent stale state
+        const [{ data: freshStudent }, { data: existingHolding }] = await Promise.all([
+          sb.from('students').select('cash').eq('id', currentStudent.id).single(),
+          sb.from('holdings').select('*').eq('student_id', currentStudent.id).eq('ticker', ticker).maybeSingle()
+        ]);
+
+        const currentCash = Number(freshStudent?.cash) || 0;
+        const sharesDelta = amount / price;
+
+        if (action === 'BUY') {
+          if (amount > currentCash + 0.001) {
+            throw new Error(`Insufficient cash (${formatMoney(currentCash)} available).`);
           }
-        })
-        .withFailureHandler(err => {
-          alertBox.innerText = "Connection failed. Please try again.";
-          alertBox.className = "alert alert-error";
-          btnBuy.disabled = false;
-          btnSell.disabled = false;
-        })
-        .processTrade(currentStudentId, action, ticker, amount);
+
+          const newCash = Number((currentCash - amount).toFixed(2));
+          if (existingHolding) {
+            const oldQty = Number(existingHolding.quantity) || 0;
+            const oldAvg = Number(existingHolding.avg_price) || 0;
+            const newQty = oldQty + sharesDelta;
+            const newAvg = ((oldQty * oldAvg) + amount) / newQty;
+
+            const { error: hErr } = await sb
+              .from('holdings')
+              .update({ quantity: newQty, avg_price: newAvg })
+              .eq('id', existingHolding.id);
+            if (hErr) throw hErr;
+          } else {
+            const { error: hErr } = await sb
+              .from('holdings')
+              .insert({
+                student_id: currentStudent.id,
+                ticker,
+                quantity: sharesDelta,
+                avg_price: price
+              });
+            if (hErr) throw hErr;
+          }
+
+          const { error: cErr } = await sb
+            .from('students')
+            .update({ cash: newCash })
+            .eq('id', currentStudent.id);
+          if (cErr) throw cErr;
+
+          showAlert('tradeAlert', `Bought ${sharesDelta.toFixed(4)} shares of ${ticker} for ${formatMoney(amount)}.`);
+        } else {
+          // SELL
+          const heldQty = Number(existingHolding?.quantity) || 0;
+          const heldValue = heldQty * price;
+
+          if (!existingHolding || heldQty <= 0) {
+            throw new Error(`You do not own any shares of ${ticker}.`);
+          }
+          if (amount > heldValue + 0.01) {
+            throw new Error(`You only hold ${formatMoney(heldValue)} worth of ${ticker}.`);
+          }
+
+          const sellAll = Math.abs(amount - heldValue) < 0.02 || sharesDelta >= heldQty;
+          const actualProceeds = sellAll ? heldValue : amount;
+          const newCash = Number((currentCash + actualProceeds).toFixed(2));
+
+          if (sellAll) {
+            const { error: dErr } = await sb.from('holdings').delete().eq('id', existingHolding.id);
+            if (dErr) throw dErr;
+          } else {
+            const { error: uErr } = await sb
+              .from('holdings')
+              .update({ quantity: heldQty - sharesDelta })
+              .eq('id', existingHolding.id);
+            if (uErr) throw uErr;
+          }
+
+          const { error: cErr } = await sb
+            .from('students')
+            .update({ cash: newCash })
+            .eq('id', currentStudent.id);
+          if (cErr) throw cErr;
+
+          showAlert('tradeAlert', `Sold ${formatMoney(actualProceeds)} of ${ticker}.`);
+        }
+
+        document.getElementById('tradeAmount').value = '';
+        await refreshDashboard();
+      } catch (err) {
+        showAlert('tradeAlert', err.message || 'Trade failed.', true);
+      } finally {
+        btnBuy.disabled = false;
+        btnSell.disabled = false;
+      }
     }
 
-    function executeAllocation(action) {
-      const accountType = document.getElementById('allocAccount').value;
-      const amount = document.getElementById('allocAmount').value;
-      const alertBox = document.getElementById('allocAlert');
+    async function executeAllocation(action) {
+      const column = document.getElementById('allocAccount').value; // 'savings' | 'term_deposit' | 'bonds'
+      const amount = parseFloat(document.getElementById('allocAmount').value);
       const btnDep = document.getElementById('btnDeposit');
       const btnWith = document.getElementById('btnWithdraw');
 
-      if (!amount || amount <= 0) return;
+      if (isNaN(amount) || amount <= 0) {
+        showAlert('allocAlert', 'Enter a valid dollar amount.', true);
+        return;
+      }
 
       btnDep.disabled = true;
       btnWith.disabled = true;
-      alertBox.style.display = "block";
-      alertBox.className = "alert";
-      alertBox.innerText = "Updating account allocation...";
+      showAlert('allocAlert', 'Updating allocation...', false);
 
-      google.script.run
-        .withSuccessHandler(res => {
-          alertBox.innerText = res.message || res.error;
-          alertBox.className = res.success ? "alert" : "alert alert-error";
-          btnDep.disabled = false;
-          btnWith.disabled = false;
-          if (res.success) {
-            document.getElementById('allocAmount').value = '';
-            refreshDashboard();
-          }
-        })
-        .withFailureHandler(err => {
-          alertBox.innerText = "Connection failed. Please try again.";
-          alertBox.className = "alert alert-error";
-          btnDep.disabled = false;
-          btnWith.disabled = false;
-        })
-        .processAllocation(currentStudentId, action, accountType, amount);
+      try {
+        const { data: fresh } = await sb
+          .from('students')
+          .select('cash, savings, term_deposit, bonds')
+          .eq('id', currentStudent.id)
+          .single();
+
+        let cash = Number(fresh.cash) || 0;
+        let bucket = Number(fresh[column]) || 0;
+
+        if (action === 'DEPOSIT') {
+          if (amount > cash + 0.001) throw new Error(`Insufficient cash (${formatMoney(cash)} available).`);
+          cash = Number((cash - amount).toFixed(2));
+          bucket = Number((bucket + amount).toFixed(2));
+        } else {
+          if (amount > bucket + 0.001) throw new Error(`Only ${formatMoney(bucket)} available in that account.`);
+          bucket = Number((bucket - amount).toFixed(2));
+          cash = Number((cash + amount).toFixed(2));
+        }
+
+        const { error } = await sb
+          .from('students')
+          .update({ cash, [column]: bucket })
+          .eq('id', currentStudent.id);
+
+        if (error) throw error;
+
+        document.getElementById('allocAmount').value = '';
+        showAlert('allocAlert', `${action === 'DEPOSIT' ? 'Deposited' : 'Withdrew'} ${formatMoney(amount)} successfully.`);
+        await refreshDashboard();
+      } catch (err) {
+        showAlert('allocAlert', err.message || 'Allocation failed.', true);
+      } finally {
+        btnDep.disabled = false;
+        btnWith.disabled = false;
+      }
     }
   </script>
 </body>
