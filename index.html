@@ -54,7 +54,7 @@
     th, td { border-bottom: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
     th { background: #f1f5f9; color: #334e68; }
     .stat-highlight { font-size: 24px; font-weight: 700; color: #102a43; }
-    .sub-balances { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: #fff; padding: 10px; border-radius: 4px; border: 1px solid #e2e8f0; margin-bottom: 14px; font-size: 12px; }
+    .sub-balances { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: #fff; padding: 10px; border-radius: 4px; border: 1px solid #e2e8f0; margin-bottom: 14px; font-size: 12px; }
     .sub-balances span { font-size: 14px; font-weight: 600; color: #334e68; }
     .alloc-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
     .alert { padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 14px; background: #e3f9e5; color: #1f7a33; border: 1px solid #a3d9a5; display: none; }
@@ -63,6 +63,7 @@
     .research-link:hover { text-decoration: underline; }
     @media (max-width: 700px) {
       .dashboard-grid, .alloc-grid { grid-template-columns: 1fr; }
+      .sub-balances { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
@@ -114,6 +115,7 @@
             <div>Term Deposit<br><span id="lblTermDeposit">$0.00</span></div>
             <div>Savings<br><span id="lblSavings">$0.00</span></div>
             <div>Bonds<br><span id="lblBonds">$0.00</span></div>
+            <div>Borrowed<br><span id="lblBorrowed" style="color: #dc2626;">$0.00</span></div>
           </div>
 
           <p style="margin-bottom: 0;">Net Portfolio Value (NZD): <br><span class="stat-highlight" id="lblTotal">$0.00</span></p>
@@ -173,6 +175,31 @@
           <div style="display: flex; gap: 8px;">
             <button id="btnDeposit" class="btn-buy" onclick="executeAllocation('DEPOSIT')">Deposit</button>
             <button id="btnWithdraw" class="btn-sell" onclick="executeAllocation('WITHDRAW')">Withdraw</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Margin Borrowing / Loans Card -->
+      <div class="card" style="margin-bottom: 20px; border-left: 4px solid #dc2626;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;">
+          <h3 style="margin: 0;">Margin Loans (Borrowing)</h3>
+          <span id="borrowInfoBadge" style="font-size: 12px; font-weight: 600; color: #486581;">
+            Loading borrowing limit...
+          </span>
+        </div>
+        <div id="borrowAlert" class="alert"></div>
+        <div class="alloc-grid">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label>Available Credit Remaining</label>
+            <input type="text" id="lblAvailableCredit" value="$0.00" disabled style="background: #f1f5f9; font-weight: 700; color: #102a43;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label>Loan Amount (NZD $)</label>
+            <input type="number" id="borrowAmount" min="1" step="0.01" placeholder="e.g. 100.00">
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button id="btnBorrow" class="btn-sell" onclick="executeLoan('BORROW')">Borrow</button>
+            <button id="btnRepay" class="btn-buy" onclick="executeLoan('REPAY')">Repay</button>
           </div>
         </div>
       </div>
@@ -295,7 +322,7 @@
           student.auth_user_id = user.id;
         }
       }
-      
+
       if (error) {
         showAlert('loginAlert', 'Database error: ' + error.message, true);
         return;
@@ -373,14 +400,15 @@
     async function refreshDashboard() {
       if (!currentStudent) return;
 
-      // 1. Fetch fresh student balances, stocks, student holdings, all classroom students & holdings
-      const [studentRes, stocksRes, myHoldingsRes, classStudentsRes, allHoldingsRes, historyRes] = await Promise.all([
+      // 1. Fetch fresh student balances, stocks, student holdings, all classroom students, holdings, history & rates
+      const [studentRes, stocksRes, myHoldingsRes, classStudentsRes, allHoldingsRes, historyRes, ratesRes] = await Promise.all([
         sb.from('students').select('*').eq('id', currentStudent.id).single(),
         sb.from('stocks').select('*').eq('classroom_id', CLASSROOM_ID).order('ticker'),
         sb.from('holdings').select('*').eq('student_id', currentStudent.id),
-        sb.from('students').select('id, name, cash, term_deposit, savings, bonds').eq('classroom_id', CLASSROOM_ID),
+        sb.from('students').select('id, name, cash, term_deposit, savings, bonds, loan_balance').eq('classroom_id', CLASSROOM_ID),
         sb.from('holdings').select('student_id, ticker, quantity'),
-        sb.from('portfolio_history').select('snapshot_date, total_net_worth').eq('student_id', currentStudent.id).order('snapshot_date')
+        sb.from('portfolio_history').select('snapshot_date, total_net_worth').eq('student_id', currentStudent.id).order('snapshot_date'),
+        sb.from('classroom_settings').select('term_deposit_rate, savings_rate, bonds_rate, max_borrow_pct, borrow_rate').eq('classroom_id', CLASSROOM_ID).maybeSingle()
       ]);
 
       if (studentRes.data) currentStudent = studentRes.data;
@@ -444,23 +472,43 @@
         });
       }
 
-      // 4. Update Account Balances & Net Worth
+      // 4. Update Account Balances & Net Worth (Assets minus Loan Balance)
       const cash = Number(currentStudent.cash) || 0;
       const termDeposit = Number(currentStudent.term_deposit) || 0;
       const savings = Number(currentStudent.savings) || 0;
       const bonds = Number(currentStudent.bonds) || 0;
-      const netWorth = cash + termDeposit + savings + bonds + stockPortfolioValue;
+      const borrowed = Number(currentStudent.loan_balance) || 0;
+      const netWorth = cash + termDeposit + savings + bonds + stockPortfolioValue - borrowed;
 
       document.getElementById('lblCash').innerText = formatMoney(cash);
       document.getElementById('lblTermDeposit').innerText = formatMoney(termDeposit);
       document.getElementById('lblSavings').innerText = formatMoney(savings);
       document.getElementById('lblBonds').innerText = formatMoney(bonds);
+      document.getElementById('lblBorrowed').innerText = formatMoney(borrowed);
       document.getElementById('lblTotal').innerText = formatMoney(netWorth);
 
-      // 5. Render Historical Chart
+      // 5. Update Interest Rates & Available Credit Display
+      const rates = ratesRes.data;
+      if (rates) {
+        const allocSel = document.getElementById('allocAccount');
+        allocSel.options[0].text = `Savings Account (${rates.savings_rate}% / day)`;
+        allocSel.options[1].text = `Term Deposit (${rates.term_deposit_rate}% / day)`;
+        allocSel.options[2].text = `Government / Corporate Bonds (${rates.bonds_rate}% / day)`;
+
+        const maxPct = Number(rates.max_borrow_pct) || 0;
+        const borrowRate = Number(rates.borrow_rate) || 0;
+        const maxAllowedLoan = Math.max(0, netWorth * (maxPct / 100));
+        const availableCredit = Math.max(0, maxAllowedLoan - borrowed);
+
+        document.getElementById('borrowInfoBadge').innerText =
+          `Max Borrow: ${maxPct}% of Net Worth | Daily Charge: ${borrowRate}%`;
+        document.getElementById('lblAvailableCredit').value = formatMoney(availableCredit);
+      }
+
+      // 6. Render Historical Chart
       renderPortfolioChart(historyRes.data || [], netWorth);
 
-      // 6. Compute & Render Class Leaderboard
+      // 7. Compute & Render Class Leaderboard
       const allStudents = classStudentsRes.data || [];
       const allHoldings = allHoldingsRes.data || [];
 
@@ -473,7 +521,8 @@
                       (Number(st.term_deposit) || 0) +
                       (Number(st.savings) || 0) +
                       (Number(st.bonds) || 0) +
-                      stStockVal;
+                      stStockVal -
+                      (Number(st.loan_balance) || 0);
         return { id: st.id, name: st.name, total };
       });
 
@@ -676,6 +725,15 @@
             .eq('id', currentStudent.id);
           if (cErr) throw cErr;
 
+          await sb.from('transactions').insert({
+            classroom_id: CLASSROOM_ID,
+            student_id: currentStudent.id,
+            ticker,
+            action: 'BUY',
+            amount,
+            details: `${ticker} | ${sharesDelta.toFixed(4)} sh @ ${formatMoney(price)}`
+          });
+
           showAlert('tradeAlert', `Bought ${sharesDelta.toFixed(4)} shares of ${ticker} for ${formatMoney(amount)}.`);
         } else {
           // SELL
@@ -691,6 +749,7 @@
 
           const sellAll = Math.abs(amount - heldValue) < 0.02 || sharesDelta >= heldQty;
           const actualProceeds = sellAll ? heldValue : amount;
+          const soldShares = sellAll ? heldQty : sharesDelta;
           const newCash = Number((currentCash + actualProceeds).toFixed(2));
 
           if (sellAll) {
@@ -709,6 +768,15 @@
             .update({ cash: newCash })
             .eq('id', currentStudent.id);
           if (cErr) throw cErr;
+
+          await sb.from('transactions').insert({
+            classroom_id: CLASSROOM_ID,
+            student_id: currentStudent.id,
+            ticker,
+            action: 'SELL',
+            amount: actualProceeds,
+            details: `${ticker} | ${soldShares.toFixed(4)} sh @ ${formatMoney(price)}`
+          });
 
           showAlert('tradeAlert', `Sold ${formatMoney(actualProceeds)} of ${ticker}.`);
         }
@@ -765,6 +833,15 @@
 
         if (error) throw error;
 
+        const label = column.replace('_', ' ');
+        await sb.from('transactions').insert({
+          classroom_id: CLASSROOM_ID,
+          student_id: currentStudent.id,
+          action,
+          amount,
+          details: `${action === 'DEPOSIT' ? 'Deposited' : 'Withdrew'} ${formatMoney(amount)} (${label})`
+        });
+
         document.getElementById('allocAmount').value = '';
         showAlert('allocAlert', `${action === 'DEPOSIT' ? 'Deposited' : 'Withdrew'} ${formatMoney(amount)} successfully.`);
         await refreshDashboard();
@@ -773,6 +850,79 @@
       } finally {
         btnDep.disabled = false;
         btnWith.disabled = false;
+      }
+    }
+
+    async function executeLoan(action) {
+      const amount = parseFloat(document.getElementById('borrowAmount').value);
+      const btnBorrow = document.getElementById('btnBorrow');
+      const btnRepay = document.getElementById('btnRepay');
+
+      if (isNaN(amount) || amount <= 0) {
+        showAlert('borrowAlert', 'Enter a valid dollar amount.', true);
+        return;
+      }
+
+      btnBorrow.disabled = true;
+      btnRepay.disabled = true;
+      showAlert('borrowAlert', 'Processing loan request...', false);
+
+      try {
+        const [{ data: fresh }, { data: holdings }, { data: stocks }, { data: settings }] = await Promise.all([
+          sb.from('students').select('cash, term_deposit, savings, bonds, loan_balance').eq('id', currentStudent.id).single(),
+          sb.from('holdings').select('ticker, quantity').eq('student_id', currentStudent.id),
+          sb.from('stocks').select('ticker, live_price').eq('classroom_id', CLASSROOM_ID),
+          sb.from('classroom_settings').select('max_borrow_pct').eq('classroom_id', CLASSROOM_ID).single()
+        ]);
+
+        const priceMap = {};
+        (stocks || []).forEach(s => { priceMap[s.ticker] = Number(s.live_price) || 0; });
+        const stockVal = (holdings || []).reduce((sum, h) => sum + (Number(h.quantity) || 0) * (priceMap[h.ticker] || 0), 0);
+
+        let cash = Number(fresh.cash) || 0;
+        let loan = Number(fresh.loan_balance) || 0;
+        const netWorth = cash + (Number(fresh.term_deposit) || 0) + (Number(fresh.savings) || 0) + (Number(fresh.bonds) || 0) + stockVal - loan;
+        const maxPct = Number(settings?.max_borrow_pct) || 0;
+        const maxAllowedLoan = Math.max(0, netWorth * (maxPct / 100));
+        const availableCredit = Math.max(0, maxAllowedLoan - loan);
+
+        if (action === 'BORROW') {
+          if (amount > availableCredit + 0.001) {
+            throw new Error(`Exceeds your borrowing limit (${formatMoney(availableCredit)} available at ${maxPct}% of net worth).`);
+          }
+          cash = Number((cash + amount).toFixed(2));
+          loan = Number((loan + amount).toFixed(2));
+        } else {
+          if (loan <= 0) throw new Error('You have no active loan to repay.');
+          if (amount > loan + 0.001) throw new Error(`Your current loan balance is only ${formatMoney(loan)}.`);
+          if (amount > cash + 0.001) throw new Error(`Insufficient liquid cash (${formatMoney(cash)} available).`);
+          cash = Number((cash - amount).toFixed(2));
+          loan = Number((loan - amount).toFixed(2));
+        }
+
+        const { error } = await sb
+          .from('students')
+          .update({ cash, loan_balance: loan })
+          .eq('id', currentStudent.id);
+
+        if (error) throw error;
+
+        await sb.from('transactions').insert({
+          classroom_id: CLASSROOM_ID,
+          student_id: currentStudent.id,
+          action,
+          amount,
+          details: `${action === 'BORROW' ? 'Borrowed' : 'Repaid'} ${formatMoney(amount)} (Loan bal: ${formatMoney(loan)})`
+        });
+
+        document.getElementById('borrowAmount').value = '';
+        showAlert('borrowAlert', `${action === 'BORROW' ? 'Borrowed' : 'Repaid'} ${formatMoney(amount)} successfully.`);
+        await refreshDashboard();
+      } catch (err) {
+        showAlert('borrowAlert', err.message || 'Loan transaction failed.', true);
+      } finally {
+        btnBorrow.disabled = false;
+        btnRepay.disabled = false;
       }
     }
   </script>
