@@ -202,6 +202,30 @@
           </div>
           <button class="btn-red" style="width: 100%; margin-top: 26px;" onclick="resetClassroom()">Reset Entire Classroom</button>
         </div>
+
+        <!-- 4. Daily Interest Rates -->
+        <div class="card">
+          <h3 style="margin-top: 0;">Daily Interest Rates (%)</h3>
+          <p style="font-size: 12px; color: #486581; margin-top: 0;">
+            Applied automatically weekdays at 5:30 PM NZDT.
+          </p>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Term Dep %</label>
+              <input type="number" id="rateTermDeposit" step="0.05" value="1.0">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Savings %</label>
+              <input type="number" id="rateSavings" step="0.05" value="0.8">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Bonds %</label>
+              <input type="number" id="rateBonds" step="0.05" value="0.5">
+            </div>
+          </div>
+          <button class="btn-green" style="width: 100%;" onclick="saveInterestRates()">Save Interest Rates</button>
+        </div>
+        
       </div>
     </div>
   </div>
