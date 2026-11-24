@@ -191,16 +191,22 @@
         </div>
 
         <!-- 3. Classroom Reset -->
-        <div class="card">
-          <h3 style="margin-top: 0;">Classroom Reset</h3>
-          <p style="font-size: 13px; color: #486581; margin-top: 0;">
-            Resets all students to the starting cash balance and clears all stock holdings.
+        <div class="card" style="border-color: #fecaca;">
+          <h3 style="margin-top: 0; color: #991b1b;">Classroom Reset</h3>
+          <p style="font-size: 12px; color: #486581; margin-top: 0;">
+            Resets all students to starting cash and deletes all holdings, fixed income, and transaction history.
           </p>
           <div class="form-group">
             <label>Reset Starting Cash (NZD $)</label>
             <input type="number" id="resetCashAmount" value="1000" step="0.01">
           </div>
-          <button class="btn-red" style="width: 100%; margin-top: 26px;" onclick="resetClassroom()">Reset Entire Classroom</button>
+          <div class="form-group">
+            <label>Type <strong>RESET</strong> to unlock</label>
+            <input type="text" id="resetConfirmInput" placeholder="Type RESET" oninput="toggleResetLock()" autocomplete="off">
+          </div>
+          <button id="btnResetClassroom" class="btn-red" style="width: 100%;" onclick="resetClassroom()" disabled>
+            🔒 Reset Entire Classroom
+          </button>
         </div>
 
         <!-- 4. Daily Interest Rates -->
