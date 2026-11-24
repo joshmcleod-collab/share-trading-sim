@@ -9,9 +9,11 @@
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f4f8; color: #102a43; }
     .container { max-width: 1200px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(16,42,67,0.08); border-top: 5px solid #102a43; }
     .brand-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #f0f4f8; padding-bottom: 15px; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-    .brand-logo-container { display: flex; align-items: center; gap: 12px; }
+    .brand-logo-container { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .brand-title { margin: 0; font-size: 20px; color: #102a43; font-weight: 700; letter-spacing: -0.5px; }
     .header-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    .class-switcher { padding: 7px 12px; border: 2px solid #2563eb; border-radius: 6px; font-weight: 700; color: #102a43; background: #eff6ff; font-size: 13px; width: auto; margin-top: 0; cursor: pointer; }
 
     button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; background: #102a43; color: white; font-weight: 600; transition: background 0.2s; font-size: 13px; }
     button:hover { background: #243b53; }
@@ -68,6 +70,7 @@
           <circle cx="15" cy="12" r="1" fill="currentColor"></circle>
         </svg>
         <h2 class="brand-title">SikmaWolff - Teacher Admin</h2>
+        <select id="classSwitcher" class="class-switcher hidden" onchange="switchClass()"></select>
       </div>
       <div id="headerControls" class="header-actions hidden">
         <button id="btnSyncPrices" class="btn-blue" onclick="triggerPriceSync()">Sync Live Prices Now</button>
@@ -81,7 +84,7 @@
     <div id="loginScreen" class="card" style="max-width: 420px; margin: 40px auto; text-align: center;">
       <h3 style="margin-top: 0;">Teacher Authentication</h3>
       <p style="color: #486581; font-size: 14px; margin-bottom: 20px;">
-        Sign in with your authorized teacher Google account to manage the simulation.
+        Sign in with your assigned teacher Google account to manage your classroom.
       </p>
       <div id="loginAlert" class="alert alert-error" style="text-align: left;"></div>
       <button id="googleLoginBtn" class="btn-google" onclick="signInWithGoogle()">
@@ -157,7 +160,7 @@
         </div>
       </div>
 
-      <!-- Admin Management Controls (2x2 Grid) -->
+      <!-- Admin Management Controls -->
       <div class="controls-grid">
         <!-- 1. Daily Rates & Borrowing Rules -->
         <div class="card">
@@ -233,7 +236,7 @@
         <div class="card" style="border-color: #fecaca;">
           <h3 style="margin-top: 0; color: #991b1b;">Classroom Reset</h3>
           <p style="font-size: 12px; color: #486581; margin-top: 0;">
-            Resets all students to starting cash and deletes all holdings, fixed income, loans, and history.
+            Resets all students in the selected class to starting cash and wipes their holdings, loans, & history.
           </p>
           <div class="form-group">
             <label>Reset Starting Cash (NZD $)</label>
@@ -244,8 +247,27 @@
             <input type="text" id="resetConfirmInput" placeholder="Type RESET" oninput="toggleResetLock()" autocomplete="off">
           </div>
           <button id="btnResetClassroom" class="btn-red" style="width: 100%;" onclick="resetClassroom()" disabled>
-            🔒 Reset Entire Classroom
+            🔒 Reset Selected Class
           </button>
+        </div>
+      </div>
+
+      <!-- 5. Create New Classroom (Super-Admin Only) -->
+      <div id="createClassCard" class="card hidden" style="border-left: 4px solid #2563eb;">
+        <h3 style="margin-top: 0;">Create New Classroom</h3>
+        <p style="font-size: 12px; color: #486581; margin-top: 0;">
+          Creates an isolated classroom, assigns its teacher admin email, and clones the current stock list automatically.
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label>Class Name</label>
+            <input type="text" id="newClassName" placeholder="e.g. 10BUS1 - Mr Smith">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label>Teacher Google Email</label>
+            <input type="email" id="newClassTeacherEmail" placeholder="e.g. abc@rangiorahigh.school.nz">
+          </div>
+          <button class="btn-blue" onclick="createNewClassroom()">+ Create Class</button>
         </div>
       </div>
     </div>
@@ -254,10 +276,12 @@
   <script>
     const SUPABASE_URL = 'https://uwaslimqdgejkpknurku.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_B4UfRGUN4MpHDjOKzsNWwg_8hHDabmX';
-    const CLASSROOM_ID = 'af32c8ee-8808-499f-a014-2b7ee8a1a0ad';
-    const TEACHER_EMAILS = ['mlj@rangiorahigh.school.nz'];
+    const TEMPLATE_CLASSROOM_ID = 'af32c8ee-8808-499f-a014-2b7ee8a1a0ad';
+    const SUPER_ADMIN_EMAIL = 'mlj@rangiorahigh.school.nz';
 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let activeClassroomId = null;
+    let managedClasses = [];
     let cachedBoard = [];
     let resetLockTimer = null;
 
@@ -310,10 +334,43 @@
 
     async function verifyTeacher(user) {
       const email = (user.email || '').toLowerCase().trim();
-      if (!TEACHER_EMAILS.includes(email)) {
-        showAlert('loginAlert', `Access denied for ${email}. Teacher account required.`, true);
+      const isSuperAdmin = email === SUPER_ADMIN_EMAIL;
+
+      const { data: allSettings, error } = await sb
+        .from('classroom_settings')
+        .select('classroom_id, class_name, teacher_email')
+        .order('class_name');
+
+      if (error) {
+        showAlert('loginAlert', 'Database error: ' + error.message, true);
+        return;
+      }
+
+      managedClasses = (allSettings || []).filter(c =>
+        isSuperAdmin || (c.teacher_email || '').toLowerCase().trim() === email
+      );
+
+      if (managedClasses.length === 0) {
+        showAlert('loginAlert', `Access denied for ${email}. No classes are assigned to this account.`, true);
         await sb.auth.signOut();
         return;
+      }
+
+      const switcher = document.getElementById('classSwitcher');
+      switcher.innerHTML = '';
+      managedClasses.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.classroom_id;
+        opt.innerText = `${c.class_name || 'Unnamed Class'}${isSuperAdmin && c.teacher_email ? ' (' + c.teacher_email.split('@')[0] + ')' : ''}`;
+        switcher.appendChild(opt);
+      });
+      switcher.classList.remove('hidden');
+
+      activeClassroomId = managedClasses[0].classroom_id;
+      switcher.value = activeClassroomId;
+
+      if (isSuperAdmin) {
+        document.getElementById('createClassCard').classList.remove('hidden');
       }
 
       document.getElementById('loginScreen').classList.add('hidden');
@@ -322,21 +379,32 @@
       await loadTeacherData();
     }
 
+    async function switchClass() {
+      activeClassroomId = document.getElementById('classSwitcher').value;
+      document.getElementById('adminAlert').style.display = 'none';
+      await loadTeacherData();
+    }
+
     async function logout() {
       await sb.auth.signOut();
+      activeClassroomId = null;
+      managedClasses = [];
+      document.getElementById('classSwitcher').classList.add('hidden');
+      document.getElementById('createClassCard').classList.add('hidden');
       document.getElementById('adminDashboard').classList.add('hidden');
       document.getElementById('headerControls').classList.add('hidden');
       document.getElementById('loginScreen').classList.remove('hidden');
     }
 
     async function loadTeacherData() {
+      if (!activeClassroomId) return;
       try {
         const [studentsRes, holdingsRes, stocksRes, txRes, settingsRes] = await Promise.all([
-          sb.from('students').select('*').eq('classroom_id', CLASSROOM_ID),
+          sb.from('students').select('*').eq('classroom_id', activeClassroomId),
           sb.from('holdings').select('*'),
-          sb.from('stocks').select('ticker, live_price').eq('classroom_id', CLASSROOM_ID),
-          sb.from('transactions').select('*').eq('classroom_id', CLASSROOM_ID).order('created_at', { ascending: false }).limit(60),
-          sb.from('classroom_settings').select('*').eq('classroom_id', CLASSROOM_ID).maybeSingle()
+          sb.from('stocks').select('ticker, live_price').eq('classroom_id', activeClassroomId),
+          sb.from('transactions').select('*').eq('classroom_id', activeClassroomId).order('created_at', { ascending: false }).limit(60),
+          sb.from('classroom_settings').select('*').eq('classroom_id', activeClassroomId).maybeSingle()
         ]);
 
         const firstError = studentsRes.error || holdingsRes.error || stocksRes.error || txRes.error;
@@ -364,7 +432,6 @@
         const studentNameMap = {};
         students.forEach(s => { studentNameMap[s.id] = s.name; });
 
-        // Build rankings (Assets minus Borrowed Loan Balance)
         const board = students.map(st => {
           const stHoldings = holdings.filter(h => h.student_id === st.id && Number(h.quantity) > 0);
           const stockVal = stHoldings.reduce((sum, h) => sum + (Number(h.quantity) || 0) * (priceMap[normTicker(h.ticker)] ?? 0), 0);
@@ -387,7 +454,6 @@
         board.forEach((s, i) => s.rank = i + 1);
         cachedBoard = board;
 
-        // Update KPI Stats
         const classWorth = board.reduce((sum, s) => sum + s.total, 0);
         const totalDebt = board.reduce((sum, s) => sum + s.borrowed, 0);
         document.getElementById('statStudents').innerText = board.length;
@@ -395,11 +461,10 @@
         document.getElementById('statAvgWorth').innerText = board.length ? formatMoney(classWorth / board.length) : '$0.00';
         document.getElementById('statTotalDebt').innerText = formatMoney(totalDebt);
 
-        // Render Leaderboard Table
         const tbody = document.getElementById('adminLeaderboard');
         tbody.innerHTML = '';
         if (board.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6">No students found in this classroom.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6">No students found in this classroom yet.</td></tr>';
         } else {
           board.forEach(st => {
             tbody.innerHTML += `
@@ -416,7 +481,6 @@
           });
         }
 
-        // Populate Adjust Cash dropdown
         const sel = document.getElementById('adjustStudentSelect');
         sel.innerHTML = '';
         [...board].sort((a, b) => a.name.localeCompare(b.name)).forEach(st => {
@@ -426,7 +490,6 @@
           sel.appendChild(opt);
         });
 
-        // Render Transaction Logs
         const logBody = document.getElementById('adminLogs');
         logBody.innerHTML = '';
         if (transactions.length === 0) {
@@ -475,15 +538,15 @@
 
       const { error } = await sb
         .from('classroom_settings')
-        .upsert({
-          classroom_id: CLASSROOM_ID,
+        .update({
           term_deposit_rate: termDepositRate,
           savings_rate: savingsRate,
           bonds_rate: bondsRate,
           borrow_rate: borrowRate,
           max_borrow_pct: maxBorrowPct,
           updated_at: new Date().toISOString()
-        });
+        })
+        .eq('classroom_id', activeClassroomId);
 
       if (error) {
         showAlert('adminAlert', 'Failed to save rates: ' + error.message, true);
@@ -499,7 +562,7 @@
     async function triggerPriceSync() {
       const btn = document.getElementById('btnSyncPrices');
       btn.disabled = true;
-      btn.innerText = 'Syncing 216 Stocks...';
+      btn.innerText = 'Syncing Stocks...';
       showAlert('adminAlert', 'Running live Yahoo Finance price sync (this takes ~10-15 seconds)...', false);
 
       try {
@@ -523,7 +586,7 @@
       try {
         await loadTeacherData();
         const rows = cachedBoard.map(st => ({
-          classroom_id: CLASSROOM_ID,
+          classroom_id: activeClassroomId,
           student_id: st.id,
           snapshot_date: today,
           total_net_worth: Number(st.total.toFixed(2))
@@ -531,7 +594,7 @@
 
         await sb.from('portfolio_history')
           .delete()
-          .eq('classroom_id', CLASSROOM_ID)
+          .eq('classroom_id', activeClassroomId)
           .eq('snapshot_date', today);
 
         const { error } = await sb.from('portfolio_history').insert(rows);
@@ -557,7 +620,7 @@
 
       const code = email.split('@')[0];
       const { error } = await sb.from('students').insert({
-        classroom_id: CLASSROOM_ID,
+        classroom_id: activeClassroomId,
         name,
         email,
         student_code: code,
@@ -612,14 +675,14 @@
       const unlocked = input.value.trim() === 'RESET';
 
       btn.disabled = !unlocked;
-      btn.innerText = unlocked ? '⚠️ Reset Entire Classroom' : '🔒 Reset Entire Classroom';
+      btn.innerText = unlocked ? '⚠️ Reset Selected Class' : '🔒 Reset Selected Class';
 
       clearTimeout(resetLockTimer);
       if (unlocked) {
         resetLockTimer = setTimeout(() => {
           input.value = '';
           btn.disabled = true;
-          btn.innerText = '🔒 Reset Entire Classroom';
+          btn.innerText = '🔒 Reset Selected Class';
         }, 15000);
       }
     }
@@ -639,7 +702,7 @@
         return;
       }
 
-      if (!confirm(`FINAL WARNING: Reset all ${cachedBoard.length} students to ${formatMoney(startCash)} and wipe all holdings, loans, & history?`)) {
+      if (!confirm(`FINAL WARNING: Reset all ${cachedBoard.length} students in this class to ${formatMoney(startCash)} and wipe all holdings, loans, & history?`)) {
         return;
       }
 
@@ -655,24 +718,83 @@
           if (hErr) throw hErr;
         }
 
-        const { error: tErr } = await sb.from('transactions').delete().eq('classroom_id', CLASSROOM_ID);
+        const { error: tErr } = await sb.from('transactions').delete().eq('classroom_id', activeClassroomId);
         if (tErr) throw tErr;
 
-        const { error: pErr } = await sb.from('portfolio_history').delete().eq('classroom_id', CLASSROOM_ID);
+        const { error: pErr } = await sb.from('portfolio_history').delete().eq('classroom_id', activeClassroomId);
         if (pErr) throw pErr;
 
         const { error: sErr } = await sb
           .from('students')
           .update({ cash: startCash, term_deposit: 0, savings: 0, bonds: 0, loan_balance: 0 })
-          .eq('classroom_id', CLASSROOM_ID);
+          .eq('classroom_id', activeClassroomId);
         if (sErr) throw sErr;
 
-        showAlert('adminAlert', `Classroom reset! All students now have ${formatMoney(startCash)} liquid cash.`);
+        showAlert('adminAlert', `Class reset! All students now have ${formatMoney(startCash)} liquid cash.`);
         await loadTeacherData();
       } catch (err) {
         showAlert('adminAlert', 'Reset failed: ' + err.message, true);
       } finally {
-        btn.innerText = '🔒 Reset Entire Classroom';
+        btn.innerText = '🔒 Reset Selected Class';
+      }
+    }
+
+    async function createNewClassroom() {
+      const className = document.getElementById('newClassName').value.trim();
+      const teacherEmail = document.getElementById('newClassTeacherEmail').value.trim().toLowerCase();
+
+      if (!className || !teacherEmail) {
+        showAlert('adminAlert', 'Enter both a class name and the teacher Google email.', true);
+        return;
+      }
+
+      const newClassroomId = crypto.randomUUID();
+
+      try {
+        const { error: csErr } = await sb.from('classroom_settings').insert({
+          classroom_id: newClassroomId,
+          class_name: className,
+          teacher_email: teacherEmail,
+          term_deposit_rate: 1.0,
+          savings_rate: 0.8,
+          bonds_rate: 0.5,
+          borrow_rate: 1.5,
+          max_borrow_pct: 50,
+          updated_at: new Date().toISOString()
+        });
+        if (csErr) throw csErr;
+
+        // Clone stocks from template classroom into new classroom
+        const { data: templateStocks, error: stErr } = await sb
+          .from('stocks')
+          .select('ticker, name, market_type, live_price, url')
+          .eq('classroom_id', TEMPLATE_CLASSROOM_ID);
+        if (stErr) throw stErr;
+
+        if (templateStocks && templateStocks.length > 0) {
+          const clonedStocks = templateStocks.map(s => ({
+            classroom_id: newClassroomId,
+            ticker: s.ticker,
+            name: s.name,
+            market_type: s.market_type,
+            live_price: s.live_price,
+            url: s.url
+          }));
+          const { error: insErr } = await sb.from('stocks').insert(clonedStocks);
+          if (insErr) throw insErr;
+        }
+
+        document.getElementById('newClassName').value = '';
+        document.getElementById('newClassTeacherEmail').value = '';
+
+        const { data: { session } } = await sb.auth.getSession();
+        if (session?.user) await verifyTeacher(session.user);
+        document.getElementById('classSwitcher').value = newClassroomId;
+        await switchClass();
+
+        showAlert('adminAlert', `Created "${className}" assigned to ${teacherEmail} with ${templateStocks?.length || 0} stocks ready!`);
+      } catch (err) {
+        showAlert('adminAlert', 'Failed to create class: ' + err.message, true);
       }
     }
   </script>
