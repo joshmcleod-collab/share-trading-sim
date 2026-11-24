@@ -280,106 +280,110 @@
     }
 
     async function loadTeacherData() {
-      const [studentsRes, holdingsRes, stocksRes, txRes] = await Promise.all([
-        sb.from('students').select('*').eq('classroom_id', CLASSROOM_ID),
-        sb.from('holdings').select('*'),
-        sb.from('stocks').select('ticker, live_price').eq('classroom_id', CLASSROOM_ID),
-        sb.from('transactions').select('*').order('created_at', { ascending: false }).limit(60)
-      ]);
+      try {
+        const [studentsRes, holdingsRes, stocksRes, txRes] = await Promise.all([
+          sb.from('students').select('*').eq('classroom_id', CLASSROOM_ID),
+          sb.from('holdings').select('*'),
+          sb.from('stocks').select('ticker, live_price').eq('classroom_id', CLASSROOM_ID),
+          sb.from('transactions').select('*').order('created_at', { ascending: false }).limit(60)
+        ]);
 
-      const students = studentsRes.data || [];
-      const holdings = holdingsRes.data || [];
-      const stocks = stocksRes.data || [];
-      const transactions = txRes.data || [];
+        const firstError = studentsRes.error || holdingsRes.error || stocksRes.error || txRes.error;
+        if (firstError) {
+          throw new Error(firstError.message);
+        }
 
-      const priceMap = {};
-      stocks.forEach(s => { priceMap[s.ticker] = Number(s.live_price) || 0; });
+        const students = studentsRes.data || [];
+        const holdings = holdingsRes.data || [];
+        const stocks = stocksRes.data || [];
+        const transactions = txRes.data || [];
 
-      const studentNameMap = {};
-      students.forEach(s => { studentNameMap[s.id] = s.name; });
+        const priceMap = {};
+        stocks.forEach(s => { priceMap[s.ticker] = Number(s.live_price) || 0; });
 
-      // Build rankings
-      const board = students.map(st => {
-        const stHoldings = holdings.filter(h => h.student_id === st.id && Number(h.quantity) > 0);
-        const stockVal = stHoldings.reduce((sum, h) => sum + (Number(h.quantity) || 0) * (priceMap[h.ticker] || 0), 0);
-        const fixedVal = (Number(st.term_deposit) || 0) + (Number(st.savings) || 0) + (Number(st.bonds) || 0);
-        const cash = Number(st.cash) || 0;
-        const total = cash + fixedVal + stockVal;
-        return {
-          id: st.id,
-          name: st.name,
-          email: st.email,
-          cash,
-          investedAndFixed: stockVal + fixedVal,
-          total
-        };
-      });
+        const studentNameMap = {};
+        students.forEach(s => { studentNameMap[s.id] = s.name; });
 
-      board.sort((a, b) => b.total - a.total);
-      board.forEach((s, i) => s.rank = i + 1);
-      cachedBoard = board;
-
-      // Update KPI Stats
-      const classWorth = board.reduce((sum, s) => sum + s.total, 0);
-      document.getElementById('statStudents').innerText = board.length;
-      document.getElementById('statClassWorth').innerText = formatMoney(classWorth);
-      document.getElementById('statAvgWorth').innerText = board.length ? formatMoney(classWorth / board.length) : '$0.00';
-      document.getElementById('statStocks').innerText = stocks.length;
-
-      // Render Leaderboard Table
-      const tbody = document.getElementById('adminLeaderboard');
-      tbody.innerHTML = '';
-      if (board.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">No students found in this classroom.</td></tr>';
-      } else {
-        board.forEach(st => {
-          tbody.innerHTML += `
-            <tr>
-              <td><strong>#${st.rank}</strong></td>
-              <td>${st.name}<br><small style="color:#64748b;">${st.email || ''}</small></td>
-              <td>${formatMoney(st.cash)}</td>
-              <td>${formatMoney(st.investedAndFixed)}</td>
-              <td><strong>${formatMoney(st.total)}</strong></td>
-            </tr>`;
+        const board = students.map(st => {
+          const stHoldings = holdings.filter(h => h.student_id === st.id && Number(h.quantity) > 0);
+          const stockVal = stHoldings.reduce((sum, h) => sum + (Number(h.quantity) || 0) * (priceMap[h.ticker] || 0), 0);
+          const fixedVal = (Number(st.term_deposit) || 0) + (Number(st.savings) || 0) + (Number(st.bonds) || 0);
+          const cash = Number(st.cash) || 0;
+          const total = cash + fixedVal + stockVal;
+          return {
+            id: st.id,
+            name: st.name,
+            email: st.email,
+            cash,
+            investedAndFixed: stockVal + fixedVal,
+            total
+          };
         });
-      }
 
-      // Populate Adjust Cash dropdown
-      const sel = document.getElementById('adjustStudentSelect');
-      sel.innerHTML = '';
-      [...board].sort((a, b) => a.name.localeCompare(b.name)).forEach(st => {
-        const opt = document.createElement('option');
-        opt.value = st.id;
-        opt.innerText = `${st.name} (${formatMoney(st.cash)} cash)`;
-        sel.appendChild(opt);
-      });
+        board.sort((a, b) => b.total - a.total);
+        board.forEach((s, i) => s.rank = i + 1);
+        cachedBoard = board;
 
-      // Render Transaction Logs
-      const logBody = document.getElementById('adminLogs');
-      logBody.innerHTML = '';
-      if (transactions.length === 0) {
-        logBody.innerHTML = '<tr><td colspan="4">No transactions logged yet.</td></tr>';
-      } else {
-        transactions.forEach(tx => {
-          const timeStr = tx.created_at ? new Date(tx.created_at).toLocaleString('en-NZ', { dateStyle: 'short', timeStyle: 'short' }) : '';
-          const studentName = studentNameMap[tx.student_id] || tx.student_name || 'Unknown';
-          const action = (tx.action || tx.type || 'TRADE').toUpperCase();
-          let badgeClass = 'badge-other';
-          if (action === 'BUY') badgeClass = 'badge-buy';
-          else if (action === 'SELL') badgeClass = 'badge-sell';
+        const classWorth = board.reduce((sum, s) => sum + s.total, 0);
+        document.getElementById('statStudents').innerText = board.length;
+        document.getElementById('statClassWorth').innerText = formatMoney(classWorth);
+        document.getElementById('statAvgWorth').innerText = board.length ? formatMoney(classWorth / board.length) : '$0.00';
+        document.getElementById('statStocks').innerText = stocks.length;
 
-          const ticker = tx.ticker || '';
-          const amt = tx.amount ?? tx.total_amount ?? tx.value ?? 0;
-          const details = tx.details || (ticker ? `${ticker} | Val: ${formatMoney(amt)}` : formatMoney(amt));
+        const tbody = document.getElementById('adminLeaderboard');
+        tbody.innerHTML = '';
+        if (board.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5">No students found in this classroom.</td></tr>';
+        } else {
+          board.forEach(st => {
+            tbody.innerHTML += `
+              <tr>
+                <td><strong>#${st.rank}</strong></td>
+                <td>${st.name}<br><small style="color:#64748b;">${st.email || ''}</small></td>
+                <td>${formatMoney(st.cash)}</td>
+                <td>${formatMoney(st.investedAndFixed)}</td>
+                <td><strong>${formatMoney(st.total)}</strong></td>
+              </tr>`;
+          });
+        }
 
-          logBody.innerHTML += `
-            <tr>
-              <td style="font-size: 11px; color: #64748b;">${timeStr}</td>
-              <td><strong>${studentName}</strong></td>
-              <td><span class="badge ${badgeClass}">${action}</span></td>
-              <td style="font-size: 12px;">${details}</td>
-            </tr>`;
+        const sel = document.getElementById('adjustStudentSelect');
+        sel.innerHTML = '';
+        [...board].sort((a, b) => a.name.localeCompare(b.name)).forEach(st => {
+          const opt = document.createElement('option');
+          opt.value = st.id;
+          opt.innerText = `${st.name} (${formatMoney(st.cash)} cash)`;
+          sel.appendChild(opt);
         });
+
+        const logBody = document.getElementById('adminLogs');
+        logBody.innerHTML = '';
+        if (transactions.length === 0) {
+          logBody.innerHTML = '<tr><td colspan="4">No transactions logged yet.</td></tr>';
+        } else {
+          transactions.forEach(tx => {
+            const timeStr = tx.created_at ? new Date(tx.created_at).toLocaleString('en-NZ', { dateStyle: 'short', timeStyle: 'short' }) : '';
+            const studentName = studentNameMap[tx.student_id] || tx.student_name || 'Unknown';
+            const action = (tx.action || tx.type || 'TRADE').toUpperCase();
+            let badgeClass = 'badge-other';
+            if (action === 'BUY') badgeClass = 'badge-buy';
+            else if (action === 'SELL') badgeClass = 'badge-sell';
+
+            const ticker = tx.ticker || '';
+            const amt = tx.amount ?? tx.total_amount ?? tx.value ?? 0;
+            const details = tx.details || (ticker ? `${ticker} | Val: ${formatMoney(amt)}` : formatMoney(amt));
+
+            logBody.innerHTML += `
+              <tr>
+                <td style="font-size: 11px; color: #64748b;">${timeStr}</td>
+                <td><strong>${studentName}</strong></td>
+                <td><span class="badge ${badgeClass}">${action}</span></td>
+                <td style="font-size: 12px;">${details}</td>
+              </tr>`;
+          });
+        }
+      } catch (err) {
+        showAlert('adminAlert', 'Error loading teacher data: ' + (err.message || err), true);
       }
     }
 
