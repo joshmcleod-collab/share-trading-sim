@@ -3,7 +3,7 @@
 <head>
   <base target="_top">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SikmaWolff - Teacher Admin</title>
+  <title>SikmaWoolf - Teacher Admin</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f4f8; color: #102a43; }
@@ -261,6 +261,10 @@
     let cachedBoard = [];
     let resetLockTimer = null;
 
+    function normTicker(t) {
+      return String(t || '').trim().toUpperCase();
+    }
+
     function formatMoney(num) {
       const val = parseFloat(num);
       return '$' + (isNaN(val) ? '0.00' : val.toFixed(2));
@@ -355,7 +359,7 @@
         }
 
         const priceMap = {};
-        stocks.forEach(s => { priceMap[s.ticker] = Number(s.live_price) || 0; });
+        stocks.forEach(s => { priceMap[normTicker(s.ticker)] = Number(s.live_price) || 0; });
 
         const studentNameMap = {};
         students.forEach(s => { studentNameMap[s.id] = s.name; });
@@ -363,7 +367,7 @@
         // Build rankings (Assets minus Borrowed Loan Balance)
         const board = students.map(st => {
           const stHoldings = holdings.filter(h => h.student_id === st.id && Number(h.quantity) > 0);
-          const stockVal = stHoldings.reduce((sum, h) => sum + (Number(h.quantity) || 0) * (priceMap[h.ticker] || 0), 0);
+          const stockVal = stHoldings.reduce((sum, h) => sum + (Number(h.quantity) || 0) * (priceMap[normTicker(h.ticker)] ?? 0), 0);
           const fixedVal = (Number(st.term_deposit) || 0) + (Number(st.savings) || 0) + (Number(st.bonds) || 0);
           const cash = Number(st.cash) || 0;
           const borrowed = Number(st.loan_balance) || 0;
