@@ -74,7 +74,7 @@
       align-items: center;
       gap: 10px;
       flex-wrap: wrap;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
     .card-subtitle {
       font-size: 12px;
@@ -90,6 +90,27 @@
     }
     .btn-reset-holdings:hover {
       background: #cbd5e1;
+    }
+
+    /* Compact Peer Account Summary Bar */
+    .peer-summary-bar {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      font-size: 11px;
+      color: #486581;
+    }
+    .peer-summary-bar span {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: #102a43;
+      margin-top: 2px;
     }
 
     button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; background: #102a43; color: white; font-weight: 600; transition: background 0.2s; }
@@ -122,6 +143,7 @@
     @media (max-width: 700px) {
       .dashboard-grid, .alloc-grid { grid-template-columns: 1fr; }
       .sub-balances { grid-template-columns: repeat(2, 1fr); }
+      .peer-summary-bar { grid-template-columns: repeat(3, 1fr); }
     }
   </style>
 </head>
@@ -276,6 +298,15 @@
               ← Back to Mine
             </button>
           </div>
+
+          <div id="peerSummaryBar" class="peer-summary-bar hidden">
+            <div>Cash<span id="peerCash">$0.00</span></div>
+            <div>Savings<span id="peerSavings">$0.00</span></div>
+            <div>Term Deposit<span id="peerTermDeposit">$0.00</span></div>
+            <div>Bonds<span id="peerBonds">$0.00</span></div>
+            <div>Loan<span id="peerBorrowed">$0.00</span></div>
+          </div>
+
           <table>
             <thead>
               <tr><th>Asset</th><th>Invested</th><th>Current Value</th><th>Gain / Loss</th></tr>
@@ -496,6 +527,7 @@
         portfolioChartInstance = null;
       }
       updateHeaderRank(null);
+      document.getElementById('peerSummaryBar').classList.add('hidden');
       document.getElementById('portfolioSwitcher').classList.add('hidden');
       document.getElementById('headerUserGreeting').classList.add('hidden');
       document.getElementById('dashboardScreen').classList.add('hidden');
@@ -553,16 +585,30 @@
       const tbody = document.getElementById('holdingsBody');
       const titleEl = document.getElementById('holdingsTitle');
       const resetBtn = document.getElementById('resetHoldingsBtn');
+      const peerBar = document.getElementById('peerSummaryBar');
 
       const isOwnPortfolio = studentId === currentStudent.id;
       const targetStudent = cachedLeaderboard.find(s => s.id === studentId);
       const displayName = targetStudent ? targetStudent.name : currentStudent.name;
 
       titleEl.innerText = isOwnPortfolio ? 'Your Holdings' : `${displayName}'s Holdings`;
-      if (isOwnPortfolio) {
+
+      if (isOwnPortfolio || !targetStudent) {
         resetBtn.classList.add('hidden');
+        peerBar.classList.add('hidden');
       } else {
         resetBtn.classList.remove('hidden');
+        document.getElementById('peerCash').innerText = formatMoney(targetStudent.cash);
+        document.getElementById('peerSavings').innerText = formatMoney(targetStudent.savings);
+        document.getElementById('peerTermDeposit').innerText = formatMoney(targetStudent.term_deposit);
+        document.getElementById('peerBonds').innerText = formatMoney(targetStudent.bonds);
+
+        const peerLoanEl = document.getElementById('peerBorrowed');
+        const loanVal = Number(targetStudent.loan_balance) || 0;
+        peerLoanEl.innerText = formatMoney(loanVal);
+        peerLoanEl.style.color = loanVal > 0 ? '#dc2626' : '#102a43';
+
+        peerBar.classList.remove('hidden');
       }
 
       const studentHoldings = cachedAllHoldings
@@ -739,13 +785,23 @@
         const stStockVal = stHoldings.reduce((sum, h) => {
           return sum + (Number(h.quantity) || 0) * (priceMap[normTicker(h.ticker)] ?? 0);
         }, 0);
-        const total = (Number(st.cash) || 0) +
-                      (Number(st.term_deposit) || 0) +
-                      (Number(st.savings) || 0) +
-                      (Number(st.bonds) || 0) +
-                      stStockVal -
-                      (Number(st.loan_balance) || 0);
-        return { id: st.id, name: st.name, total };
+        const stCash = Number(st.cash) || 0;
+        const stTermDeposit = Number(st.term_deposit) || 0;
+        const stSavings = Number(st.savings) || 0;
+        const stBonds = Number(st.bonds) || 0;
+        const stLoanBalance = Number(st.loan_balance) || 0;
+        const total = stCash + stTermDeposit + stSavings + stBonds + stStockVal - stLoanBalance;
+
+        return {
+          id: st.id,
+          name: st.name,
+          cash: stCash,
+          term_deposit: stTermDeposit,
+          savings: stSavings,
+          bonds: stBonds,
+          loan_balance: stLoanBalance,
+          total
+        };
       });
 
       board.sort((a, b) => b.total - a.total);
