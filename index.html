@@ -35,6 +35,62 @@
     tr.lb-rank-3 { background: #fff7ed; font-weight: 700; }
     tr.lb-rank-3 td { border-bottom: 1px solid #fdba74; color: #7c2d12; }
     tr.lb-current-user { outline: 2px solid #2563eb; outline-offset: -2px; }
+    tr.lb-selected td:first-child { box-shadow: inset 4px 0 0 #2563eb; }
+
+    /* Clickable Leaderboard Names & Holdings Header */
+    .lb-name-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      margin: 0;
+      font: inherit;
+      font-weight: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-color: rgba(37, 99, 235, 0.45);
+      text-underline-offset: 2px;
+    }
+    .lb-name-btn:hover {
+      background: none;
+      color: #2563eb;
+      text-decoration-color: #2563eb;
+    }
+    .lb-viewing-tag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      background: #dbeafe;
+      color: #1d4ed8;
+      vertical-align: middle;
+    }
+    .card-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .card-subtitle {
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 400;
+    }
+    .btn-reset-holdings {
+      padding: 4px 10px;
+      font-size: 12px;
+      background: #e2e8f0;
+      color: #102a43;
+      border-radius: 4px;
+    }
+    .btn-reset-holdings:hover {
+      background: #cbd5e1;
+    }
 
     button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; background: #102a43; color: white; font-weight: 600; transition: background 0.2s; }
     button:hover { background: #243b53; }
@@ -209,7 +265,17 @@
 
       <div class="dashboard-grid">
         <div class="card" style="overflow-x: auto;">
-          <h3 style="margin-top: 0;">Your Holdings</h3>
+          <div class="card-header-row">
+            <h3 id="holdingsTitle" style="margin: 0;">Your Holdings</h3>
+            <button
+              id="resetHoldingsBtn"
+              type="button"
+              class="btn-reset-holdings hidden"
+              onclick="selectLeaderboardStudent(currentStudent.id)"
+            >
+              ← Back to Mine
+            </button>
+          </div>
           <table>
             <thead>
               <tr><th>Asset</th><th>Invested</th><th>Current Value</th><th>Gain / Loss</th></tr>
@@ -221,7 +287,10 @@
         </div>
         
         <div class="card" style="overflow-x: auto;">
-          <h3 style="margin-top: 0;">Class Leaderboard</h3>
+          <div class="card-header-row">
+            <h3 style="margin: 0;">Class Leaderboard</h3>
+            <span class="card-subtitle">Click a name to view holdings</span>
+          </div>
           <table>
             <thead>
               <tr><th>Rank</th><th>Name</th><th>Net Worth</th></tr>
@@ -246,8 +315,24 @@
     let portfolioChartInstance = null;
     let allAvailableStocks = [];
 
+    // Cached state for interactive Leaderboard Holdings View
+    let selectedLeaderboardStudentId = null;
+    let cachedLeaderboard = [];
+    let cachedAllHoldings = [];
+    let cachedPriceMap = {};
+    let cachedStockNameMap = {};
+
     function normTicker(t) {
       return String(t || '').trim().toUpperCase();
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function formatMoney(num) {
@@ -355,6 +440,7 @@
 
       myPortfolios = students;
       currentStudent = myPortfolios[0];
+      selectedLeaderboardStudentId = currentStudent.id;
 
       const switcher = document.getElementById('portfolioSwitcher');
       if (myPortfolios.length > 1) {
@@ -389,6 +475,7 @@
       const found = myPortfolios.find(p => p.id === selectedId);
       if (!found) return;
       currentStudent = found;
+      selectedLeaderboardStudentId = currentStudent.id;
       document.getElementById('accountOverviewTitle').innerText =
         `${currentStudent.name}'s Account (${currentStudent._className})`;
       await refreshDashboard();
@@ -399,6 +486,11 @@
       myPortfolios = [];
       currentStudent = null;
       allAvailableStocks = [];
+      selectedLeaderboardStudentId = null;
+      cachedLeaderboard = [];
+      cachedAllHoldings = [];
+      cachedPriceMap = {};
+      cachedStockNameMap = {};
       if (portfolioChartInstance) {
         portfolioChartInstance.destroy();
         portfolioChartInstance = null;
@@ -443,6 +535,111 @@
       badge.classList.remove('hidden');
     }
 
+    function selectLeaderboardStudent(studentId) {
+      if (!currentStudent) return;
+
+      // Clicking the already-selected classmate toggles back to your own holdings
+      if (selectedLeaderboardStudentId === studentId && studentId !== currentStudent.id) {
+        selectedLeaderboardStudentId = currentStudent.id;
+      } else {
+        selectedLeaderboardStudentId = studentId;
+      }
+
+      renderHoldingsTable(selectedLeaderboardStudentId);
+      renderLeaderboardTable();
+    }
+
+    function renderHoldingsTable(studentId) {
+      const tbody = document.getElementById('holdingsBody');
+      const titleEl = document.getElementById('holdingsTitle');
+      const resetBtn = document.getElementById('resetHoldingsBtn');
+
+      const isOwnPortfolio = studentId === currentStudent.id;
+      const targetStudent = cachedLeaderboard.find(s => s.id === studentId);
+      const displayName = targetStudent ? targetStudent.name : currentStudent.name;
+
+      titleEl.innerText = isOwnPortfolio ? 'Your Holdings' : `${displayName}'s Holdings`;
+      if (isOwnPortfolio) {
+        resetBtn.classList.add('hidden');
+      } else {
+        resetBtn.classList.remove('hidden');
+      }
+
+      const studentHoldings = cachedAllHoldings
+        .filter(h => h.student_id === studentId && Number(h.quantity) > 0)
+        .sort((a, b) => normTicker(a.ticker).localeCompare(normTicker(b.ticker)));
+
+      tbody.innerHTML = '';
+
+      if (studentHoldings.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4">${isOwnPortfolio ? 'No holdings yet.' : `${escapeHtml(displayName)} has no stock holdings yet.`}</td></tr>`;
+        return;
+      }
+
+      studentHoldings.forEach(h => {
+        const key = normTicker(h.ticker);
+        const qty = Number(h.quantity) || 0;
+        const avg = Number(h.avg_price) || 0;
+        const livePrice = cachedPriceMap[key] ?? 0;
+        const companyName = cachedStockNameMap[key] || '';
+
+        const invested = avg * qty;
+        const currentValue = livePrice * qty;
+        const profitLoss = currentValue - invested;
+
+        let arrow = '—', color = '#64748b', sign = '';
+        if (profitLoss > 0.005) { arrow = '▲'; color = '#16a34a'; sign = '+'; }
+        else if (profitLoss < -0.005) { arrow = '▼'; color = '#dc2626'; sign = '-'; }
+
+        tbody.innerHTML += `
+          <tr>
+            <td>
+              <strong>${escapeHtml(h.ticker)}</strong>
+              ${companyName ? `<span class="holding-company">${escapeHtml(companyName)}</span>` : ''}
+              <span class="holding-shares">${qty.toFixed(4)} sh @ ${formatMoney(livePrice)}</span>
+            </td>
+            <td>${formatMoney(invested)}</td>
+            <td>${formatMoney(currentValue)}</td>
+            <td style="color:${color}; font-weight:700;">${arrow} ${sign}$${Math.abs(profitLoss).toFixed(2)}</td>
+          </tr>`;
+      });
+    }
+
+    function renderLeaderboardTable() {
+      const lbBody = document.getElementById('leaderboardBody');
+      lbBody.innerHTML = '';
+
+      cachedLeaderboard.forEach(student => {
+        const isMe = student.id === currentStudent.id;
+        const isSelected = student.id === selectedLeaderboardStudentId;
+        let rowClass = '';
+        let rankDisplay = '#' + student.rank;
+
+        if (student.rank === 1) { rowClass = 'lb-rank-1'; rankDisplay = '🥇 #1'; }
+        else if (student.rank === 2) { rowClass = 'lb-rank-2'; rankDisplay = '🥈 #2'; }
+        else if (student.rank === 3) { rowClass = 'lb-rank-3'; rankDisplay = '🥉 #3'; }
+        if (isMe) rowClass += (rowClass ? ' ' : '') + 'lb-current-user';
+        if (isSelected) rowClass += (rowClass ? ' ' : '') + 'lb-selected';
+
+        const viewingTag = isSelected && !isMe
+          ? '<span class="lb-viewing-tag">Viewing</span>'
+          : '';
+
+        lbBody.innerHTML += `
+          <tr class="${rowClass}">
+            <td>${rankDisplay}</td>
+            <td>
+              <button
+                type="button"
+                class="lb-name-btn"
+                onclick="selectLeaderboardStudent('${escapeHtml(student.id)}')"
+              >${escapeHtml(student.name)}${isMe ? ' (You)' : ''}</button>${viewingTag}
+            </td>
+            <td>${formatMoney(student.total)}</td>
+          </tr>`;
+      });
+    }
+
     async function refreshDashboard() {
       if (!currentStudent) return;
       const classId = currentStudent.classroom_id;
@@ -452,7 +649,7 @@
         sb.from('stocks').select('*').eq('classroom_id', classId).order('ticker'),
         sb.from('holdings').select('*').eq('student_id', currentStudent.id),
         sb.from('students').select('id, name, cash, term_deposit, savings, bonds, loan_balance').eq('classroom_id', classId),
-        sb.from('holdings').select('student_id, ticker, quantity'),
+        sb.from('holdings').select('student_id, ticker, quantity, avg_price'),
         sb.from('portfolio_history').select('snapshot_date, total_net_worth').eq('student_id', currentStudent.id).order('snapshot_date'),
         sb.from('classroom_settings').select('class_name, term_deposit_rate, savings_rate, bonds_rate, max_borrow_pct, borrow_rate').eq('classroom_id', classId).maybeSingle()
       ]);
@@ -473,6 +670,9 @@
         stockNameMap[key] = s.name || '';
       });
 
+      cachedPriceMap = priceMap;
+      cachedStockNameMap = stockNameMap;
+
       const marketSelect = document.getElementById('tradeMarket');
       const previousMarket = marketSelect.value;
       const uniqueMarkets = [...new Set(
@@ -491,42 +691,12 @@
       }
       filterTickersByMarket();
 
-      const tbody = document.getElementById('holdingsBody');
-      tbody.innerHTML = '';
-      let stockPortfolioValue = 0;
-
-      if (myHoldings.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4">No holdings yet.</td></tr>';
-      } else {
-        myHoldings.forEach(h => {
-          const key = normTicker(h.ticker);
-          const qty = Number(h.quantity) || 0;
-          const avg = Number(h.avg_price) || 0;
-          const livePrice = priceMap[key] ?? 0;
-          const companyName = stockNameMap[key] || '';
-
-          const invested = avg * qty;
-          const currentValue = livePrice * qty;
-          const profitLoss = currentValue - invested;
-          stockPortfolioValue += currentValue;
-
-          let arrow = '—', color = '#64748b', sign = '';
-          if (profitLoss > 0.005) { arrow = '▲'; color = '#16a34a'; sign = '+'; }
-          else if (profitLoss < -0.005) { arrow = '▼'; color = '#dc2626'; sign = '-'; }
-
-          tbody.innerHTML += `
-            <tr>
-              <td>
-                <strong>${h.ticker}</strong>
-                ${companyName ? `<span class="holding-company">${companyName}</span>` : ''}
-                <span class="holding-shares">${qty.toFixed(4)} sh @ ${formatMoney(livePrice)}</span>
-              </td>
-              <td>${formatMoney(invested)}</td>
-              <td>${formatMoney(currentValue)}</td>
-              <td style="color:${color}; font-weight:700;">${arrow} ${sign}$${Math.abs(profitLoss).toFixed(2)}</td>
-            </tr>`;
-        });
-      }
+      // Always calculate logged-in student's own portfolio value for Account Overview & Borrowing Limit
+      const stockPortfolioValue = myHoldings.reduce((sum, h) => {
+        const qty = Number(h.quantity) || 0;
+        const livePrice = priceMap[normTicker(h.ticker)] ?? 0;
+        return sum + (livePrice * qty);
+      }, 0);
 
       const cash = Number(currentStudent.cash) || 0;
       const termDeposit = Number(currentStudent.term_deposit) || 0;
@@ -562,10 +732,10 @@
       renderPortfolioChart(historyRes.data || [], netWorth);
 
       const allStudents = classStudentsRes.data || [];
-      const allHoldings = allHoldingsRes.data || [];
+      cachedAllHoldings = allHoldingsRes.data || [];
 
       const board = allStudents.map(st => {
-        const stHoldings = allHoldings.filter(h => h.student_id === st.id && Number(h.quantity) > 0);
+        const stHoldings = cachedAllHoldings.filter(h => h.student_id === st.id && Number(h.quantity) > 0);
         const stStockVal = stHoldings.reduce((sum, h) => {
           return sum + (Number(h.quantity) || 0) * (priceMap[normTicker(h.ticker)] ?? 0);
         }, 0);
@@ -580,29 +750,18 @@
 
       board.sort((a, b) => b.total - a.total);
       board.forEach((entry, idx) => entry.rank = idx + 1);
+      cachedLeaderboard = board;
 
       const me = board.find(s => s.id === currentStudent.id);
       updateHeaderRank(me ? me.rank : null, board.length);
 
-      const lbBody = document.getElementById('leaderboardBody');
-      lbBody.innerHTML = '';
-      board.forEach(student => {
-        const isMe = student.id === currentStudent.id;
-        let rowClass = '';
-        let rankDisplay = '#' + student.rank;
+      // Default back to logged-in student if previously selected student isn't in this class
+      if (!selectedLeaderboardStudentId || !board.some(s => s.id === selectedLeaderboardStudentId)) {
+        selectedLeaderboardStudentId = currentStudent.id;
+      }
 
-        if (student.rank === 1) { rowClass = 'lb-rank-1'; rankDisplay = '🥇 #1'; }
-        else if (student.rank === 2) { rowClass = 'lb-rank-2'; rankDisplay = '🥈 #2'; }
-        else if (student.rank === 3) { rowClass = 'lb-rank-3'; rankDisplay = '🥉 #3'; }
-        if (isMe) rowClass += (rowClass ? ' ' : '') + 'lb-current-user';
-
-        lbBody.innerHTML += `
-          <tr class="${rowClass}">
-            <td>${rankDisplay}</td>
-            <td>${student.name}${isMe ? ' (You)' : ''}</td>
-            <td>${formatMoney(student.total)}</td>
-          </tr>`;
-      });
+      renderHoldingsTable(selectedLeaderboardStudentId);
+      renderLeaderboardTable();
     }
 
     function renderPortfolioChart(historyRows, currentNetWorth) {
@@ -832,6 +991,7 @@
         }
 
         document.getElementById('tradeAmount').value = '';
+        selectedLeaderboardStudentId = currentStudent.id;
         await refreshDashboard();
       } catch (err) {
         showAlert('tradeAlert', err.message || 'Trade failed.', true);
