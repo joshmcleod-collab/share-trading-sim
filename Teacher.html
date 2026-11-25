@@ -47,6 +47,7 @@
     .badge-sell { background: #fee2e2; color: #991b1b; }
     .badge-borrow { background: #fef3c7; color: #92400e; }
     .badge-repay { background: #d1fae5; color: #065f46; }
+    .badge-bonus { background: #ede9fe; color: #5b21b6; }
     .badge-other { background: #e0f2fe; color: #075985; }
 
     .form-group { margin-bottom: 10px; }
@@ -57,8 +58,19 @@
     .alert { padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; font-size: 14px; background: #e3f9e5; color: #1f7a33; border: 1px solid #a3d9a5; display: none; }
     .alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 
+    /* Bulk Student Bonus Payments */
+    .bonus-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    .bonus-select-actions { display: flex; gap: 6px; align-items: center; }
+    .bonus-student-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 8px; max-height: 210px; overflow-y: auto; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; margin-bottom: 14px; }
+    .bonus-student-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 4px; cursor: pointer; font-size: 13px; background: #f8fafc; user-select: none; }
+    .bonus-student-item:hover { background: #eff6ff; border-color: #93c5fd; }
+    .bonus-student-item input[type="checkbox"] { width: auto; margin: 0; cursor: pointer; }
+    .bonus-student-meta { display: flex; flex-direction: column; line-height: 1.25; }
+    .bonus-student-cash { font-size: 11px; color: #64748b; font-weight: 400; }
+    .bonus-controls-grid { display: grid; grid-template-columns: 180px 1fr auto; gap: 12px; align-items: end; }
+
     @media (max-width: 900px) {
-      .dashboard-grid, .controls-grid, .stat-row { grid-template-columns: 1fr; }
+      .dashboard-grid, .controls-grid, .stat-row, .bonus-controls-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -72,7 +84,7 @@
           <circle cx="9" cy="12" r="1" fill="currentColor"></circle>
           <circle cx="15" cy="12" r="1" fill="currentColor"></circle>
         </svg>
-        <h2 class="brand-title">SikmaWolff - Teacher Admin</h2>
+        <h2 class="brand-title">SikmaWoolf - Teacher Admin</h2>
         <select id="classSwitcher" class="class-switcher hidden" onchange="switchClass()"></select>
       </div>
       <div id="headerControls" class="header-actions hidden">
@@ -151,6 +163,42 @@
                 <tr><td colspan="4">Loading transaction history...</td></tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bulk Student Bonus Payments -->
+      <div class="card" style="margin-bottom: 20px; border-left: 4px solid #16a34a;">
+        <div class="bonus-toolbar">
+          <div>
+            <h3 style="margin: 0;">Bulk Student Bonus Payments</h3>
+            <span id="bonusSummaryLabel" style="font-size: 12px; color: #486581; font-weight: 600;">
+              0 students selected — Total Payout: $0.00
+            </span>
+          </div>
+          <div class="bonus-select-actions">
+            <button type="button" class="btn-outline" onclick="toggleAllBonusStudents(true)">Select All</button>
+            <button type="button" class="btn-outline" onclick="toggleAllBonusStudents(false)">Clear</button>
+          </div>
+        </div>
+
+        <div id="bonusStudentList" class="bonus-student-grid">
+          <span style="color: #64748b; font-size: 13px;">Loading students...</span>
+        </div>
+
+        <div class="bonus-controls-grid">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="bonusAmount">Bonus per Student ($)</label>
+            <input type="number" id="bonusAmount" min="0.01" step="0.01" placeholder="e.g. 50.00" oninput="updateBonusSummary()">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="bonusReason">Reason / Audit Note</label>
+            <input type="text" id="bonusReason" maxlength="100" placeholder="e.g. Market Quiz Winner or Participation Bonus">
+          </div>
+          <div>
+            <button id="btnIssueBonus" class="btn-green" onclick="executeBulkBonus()" disabled>
+              Issue Bonus
+            </button>
           </div>
         </div>
       </div>
@@ -302,6 +350,15 @@ Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
       return String(t || '').trim().toUpperCase();
     }
 
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function formatMoney(num) {
       const val = parseFloat(num);
       return '$' + (isNaN(val) ? '0.00' : val.toFixed(2));
@@ -435,12 +492,157 @@ Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
       await sb.auth.signOut();
       activeClassroomId = null;
       managedClasses = [];
+      cachedBoard = [];
       document.getElementById('classSwitcher').classList.add('hidden');
       document.getElementById('createClassCard').classList.add('hidden');
       document.getElementById('adminDashboard').classList.add('hidden');
       document.getElementById('headerControls').classList.add('hidden');
       document.getElementById('loginScreen').classList.remove('hidden');
       initGoogleSignIn();
+    }
+
+    function renderBonusStudentSelector(students) {
+      const container = document.getElementById('bonusStudentList');
+      if (!container) return;
+
+      const sorted = [...(students || [])].sort((a, b) =>
+        String(a.name || '').localeCompare(String(b.name || ''))
+      );
+
+      if (sorted.length === 0) {
+        container.innerHTML = '<span style="color: #64748b; font-size: 13px;">No students in this classroom yet.</span>';
+        updateBonusSummary();
+        return;
+      }
+
+      container.innerHTML = sorted
+        .map(
+          (st) => `
+          <label class="bonus-student-item">
+            <input
+              type="checkbox"
+              class="bonus-student-checkbox"
+              value="${escapeHtml(st.id)}"
+              onchange="updateBonusSummary()"
+            >
+            <span class="bonus-student-meta">
+              <strong>${escapeHtml(st.name)}</strong>
+              <span class="bonus-student-cash">Cash: ${formatMoney(st.cash)}</span>
+            </span>
+          </label>
+        `
+        )
+        .join('');
+
+      updateBonusSummary();
+    }
+
+    function toggleAllBonusStudents(checked) {
+      document.querySelectorAll('.bonus-student-checkbox').forEach((cb) => {
+        cb.checked = checked;
+      });
+      updateBonusSummary();
+    }
+
+    function getSelectedBonusStudentIds() {
+      return Array.from(document.querySelectorAll('.bonus-student-checkbox:checked')).map(
+        (cb) => cb.value
+      );
+    }
+
+    function updateBonusSummary() {
+      const selectedIds = getSelectedBonusStudentIds();
+      const amount = parseFloat(document.getElementById('bonusAmount')?.value) || 0;
+      const totalPayout = selectedIds.length * Math.max(0, amount);
+
+      const summaryEl = document.getElementById('bonusSummaryLabel');
+      if (summaryEl) {
+        summaryEl.innerText = `${selectedIds.length} student${selectedIds.length === 1 ? '' : 's'} selected — Total Payout: ${formatMoney(totalPayout)}`;
+      }
+
+      const btn = document.getElementById('btnIssueBonus');
+      if (btn) {
+        btn.disabled = selectedIds.length === 0 || amount <= 0;
+        btn.innerText =
+          selectedIds.length > 0 && amount > 0
+            ? `Issue Bonus (${formatMoney(totalPayout)})`
+            : 'Issue Bonus';
+      }
+    }
+
+    async function executeBulkBonus() {
+      const selectedIds = getSelectedBonusStudentIds();
+      const amount = parseFloat(document.getElementById('bonusAmount').value);
+      const rawReason = document.getElementById('bonusReason').value.trim();
+      const reason = rawReason || 'Teacher Bonus';
+      const btn = document.getElementById('btnIssueBonus');
+
+      if (selectedIds.length === 0) {
+        showAlert('adminAlert', 'Select at least one student for the bonus payout.', true);
+        return;
+      }
+      if (isNaN(amount) || amount <= 0) {
+        showAlert('adminAlert', 'Enter a valid bonus amount greater than $0.00.', true);
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = 'Issuing Bonus...';
+      showAlert('adminAlert', 'Processing bulk bonus payments...', false);
+
+      try {
+        // Re-fetch fresh student cash balances immediately before mutating
+        const { data: freshStudents, error: fetchErr } = await sb
+          .from('students')
+          .select('id, classroom_id, name, cash')
+          .eq('classroom_id', activeClassroomId)
+          .in('id', selectedIds);
+
+        if (fetchErr) throw fetchErr;
+        if (!freshStudents || freshStudents.length === 0) {
+          throw new Error('Could not load selected student accounts.');
+        }
+
+        const updateResults = await Promise.all(
+          freshStudents.map((st) => {
+            const currentCash = Number(st.cash) || 0;
+            const newCash = Number((currentCash + amount).toFixed(2));
+            return sb.from('students').update({ cash: newCash }).eq('id', st.id);
+          })
+        );
+
+        const failedUpdate = updateResults.find((res) => res.error);
+        if (failedUpdate) throw failedUpdate.error;
+
+        const txRows = freshStudents.map((st) => {
+          const newCash = Number(((Number(st.cash) || 0) + amount).toFixed(2));
+          return {
+            classroom_id: activeClassroomId,
+            student_id: st.id,
+            ticker: null,
+            action: 'BONUS',
+            amount,
+            details: `${reason} (+${formatMoney(amount)} | Cash: ${formatMoney(newCash)})`
+          };
+        });
+
+        const { error: txErr } = await sb.from('transactions').insert(txRows);
+        if (txErr) throw txErr;
+
+        const totalPaid = amount * freshStudents.length;
+        document.getElementById('bonusAmount').value = '';
+        document.getElementById('bonusReason').value = '';
+
+        await loadTeacherData();
+        showAlert(
+          'adminAlert',
+          `Issued ${formatMoney(amount)} bonus to ${freshStudents.length} student${freshStudents.length === 1 ? '' : 's'} (${formatMoney(totalPaid)} total)!`
+        );
+      } catch (err) {
+        showAlert('adminAlert', 'Bulk bonus failed: ' + (err.message || err), true);
+      } finally {
+        updateBonusSummary();
+      }
     }
 
     async function loadTeacherData() {
@@ -517,7 +719,7 @@ Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
             tbody.innerHTML += `
               <tr>
                 <td><strong>#${st.rank}</strong></td>
-                <td>${st.name}<br><small style="color:#64748b;">${st.email || ''}</small></td>
+                <td>${escapeHtml(st.name)}<br><small style="color:#64748b;">${escapeHtml(st.email || '')}</small></td>
                 <td>${formatMoney(st.cash)}</td>
                 <td>${formatMoney(st.investedAndFixed)}</td>
                 <td style="color: ${st.borrowed > 0 ? '#dc2626' : '#64748b'}; font-weight: ${st.borrowed > 0 ? '700' : '400'};">
@@ -527,6 +729,8 @@ Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
               </tr>`;
           });
         }
+
+        renderBonusStudentSelector(board);
 
         const sel = document.getElementById('adjustStudentSelect');
         sel.innerHTML = '';
@@ -552,6 +756,7 @@ Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
             else if (action === 'SELL') badgeClass = 'badge-sell';
             else if (action === 'BORROW') badgeClass = 'badge-borrow';
             else if (action === 'REPAY') badgeClass = 'badge-repay';
+            else if (action === 'BONUS') badgeClass = 'badge-bonus';
 
             const ticker = tx.ticker || '';
             const amt = tx.amount ?? tx.total_amount ?? tx.value ?? 0;
@@ -560,9 +765,9 @@ Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
             logBody.innerHTML += `
               <tr>
                 <td style="font-size: 11px; color: #64748b;">${timeStr}</td>
-                <td><strong>${studentName}</strong></td>
-                <td><span class="badge ${badgeClass}">${action}</span></td>
-                <td style="font-size: 12px;">${details}</td>
+                <td><strong>${escapeHtml(studentName)}</strong></td>
+                <td><span class="badge ${badgeClass}">${escapeHtml(action)}</span></td>
+                <td style="font-size: 12px;">${escapeHtml(details)}</td>
               </tr>`;
           });
         }
