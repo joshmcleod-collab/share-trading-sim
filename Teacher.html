@@ -48,6 +48,7 @@
     .badge-borrow { background: #fef3c7; color: #92400e; }
     .badge-repay { background: #d1fae5; color: #065f46; }
     .badge-bonus { background: #ede9fe; color: #5b21b6; }
+    .badge-stipend { background: #dbeafe; color: #1e40af; }
     .badge-other { background: #e0f2fe; color: #075985; }
 
     .form-group { margin-bottom: 10px; }
@@ -205,11 +206,11 @@
 
       <!-- Admin Management Controls -->
       <div class="controls-grid">
-        <!-- 1. Daily Rates & Borrowing Rules -->
+        <!-- 1. Daily Rates, Borrowing & Weekly Stipend -->
         <div class="card">
-          <h3 style="margin-top: 0;">Daily Rates & Borrowing Rules</h3>
+          <h3 style="margin-top: 0;">Rates, Borrowing & Weekly Stipend</h3>
           <p style="font-size: 12px; color: #486581; margin-top: 0;">
-            Applied automatically weekdays at 5:30 PM NZDT.
+            Interest applies weekdays at 5:30 PM NZDT. Weekly cash stipend pays Mondays at 8:00 AM NZDT ($0 = off).
           </p>
           <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
@@ -225,17 +226,21 @@
               <input type="number" id="rateBonds" step="0.05" value="0.5">
             </div>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px;">
             <div class="form-group" style="margin-bottom: 0;">
               <label>Loan Charge % / day</label>
               <input type="number" id="rateBorrow" step="0.05" value="1.5">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-              <label>Max Borrow (% Net Worth)</label>
+              <label>Max Borrow (% NW)</label>
               <input type="number" id="maxBorrowPct" step="5" min="0" max="500" value="50">
             </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Weekly Cash ($)</label>
+              <input type="number" id="weeklyStipend" step="5" min="0" value="0">
+            </div>
           </div>
-          <button class="btn-green" style="width: 100%;" onclick="saveInterestRates()">Save Rates & Borrowing Rules</button>
+          <button class="btn-green" style="width: 100%;" onclick="saveInterestRates()">Save Rates, Borrowing & Stipend</button>
         </div>
 
         <!-- 2. Add Student & CSV Bulk Upload -->
@@ -673,6 +678,7 @@ Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
           document.getElementById('rateBonds').value = settings.bonds_rate;
           document.getElementById('rateBorrow').value = settings.borrow_rate ?? 1.5;
           document.getElementById('maxBorrowPct').value = settings.max_borrow_pct ?? 50;
+          document.getElementById('weeklyStipend').value = settings.weekly_stipend ?? 0;
         }
 
         const priceMap = {};
@@ -757,6 +763,7 @@ Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
             else if (action === 'BORROW') badgeClass = 'badge-borrow';
             else if (action === 'REPAY') badgeClass = 'badge-repay';
             else if (action === 'BONUS') badgeClass = 'badge-bonus';
+            else if (action === 'STIPEND') badgeClass = 'badge-stipend';
 
             const ticker = tx.ticker || '';
             const amt = tx.amount ?? tx.total_amount ?? tx.value ?? 0;
@@ -782,11 +789,19 @@ Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
       const bondsRate = parseFloat(document.getElementById('rateBonds').value);
       const borrowRate = parseFloat(document.getElementById('rateBorrow').value);
       const maxBorrowPct = parseFloat(document.getElementById('maxBorrowPct').value);
+      const weeklyStipend = parseFloat(document.getElementById('weeklyStipend').value);
 
-      if ([termDepositRate, savingsRate, bondsRate, borrowRate, maxBorrowPct].some(isNaN)) {
-        showAlert('adminAlert', 'Please enter valid numbers for all rate and borrowing fields.', true);
+      if ([termDepositRate, savingsRate, bondsRate, borrowRate, maxBorrowPct, weeklyStipend].some(isNaN)) {
+        showAlert('adminAlert', 'Please enter valid numbers for all rate, borrowing, and stipend fields.', true);
         return;
       }
+
+      if (weeklyStipend < 0) {
+        showAlert('adminAlert', 'Weekly cash stipend cannot be negative.', true);
+        return;
+      }
+
+      const cleanStipend = Number(weeklyStipend.toFixed(2));
 
       const { error } = await sb
         .from('classroom_settings')
@@ -796,18 +811,19 @@ Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
           bonds_rate: bondsRate,
           borrow_rate: borrowRate,
           max_borrow_pct: maxBorrowPct,
+          weekly_stipend: cleanStipend,
           updated_at: new Date().toISOString()
         })
         .eq('classroom_id', activeClassroomId);
 
       if (error) {
-        showAlert('adminAlert', 'Failed to save rates: ' + error.message, true);
+        showAlert('adminAlert', 'Failed to save settings: ' + error.message, true);
         return;
       }
 
       showAlert(
         'adminAlert',
-        `Saved! TD: ${termDepositRate}%, Savings: ${savingsRate}%, Bonds: ${bondsRate}%, Loan Charge: ${borrowRate}%/day, Max Borrow: ${maxBorrowPct}%.`
+        `Saved! TD: ${termDepositRate}%, Savings: ${savingsRate}%, Bonds: ${bondsRate}%, Loan: ${borrowRate}%/day, Max Borrow: ${maxBorrowPct}%, Weekly Cash: ${formatMoney(cleanStipend)}.`
       );
     }
 
@@ -1152,6 +1168,7 @@ Emma Wilson,22198@rangiorahigh.school.nz,1000</div>
           bonds_rate: 0.5,
           borrow_rate: 1.5,
           max_borrow_pct: 50,
+          weekly_stipend: 0,
           updated_at: new Date().toISOString()
         });
         if (csErr) throw csErr;
