@@ -113,6 +113,26 @@
       margin-top: 2px;
     }
 
+    /* Weekly Cash Allowance Banner */
+    .allowance-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-left: 4px solid #2563eb;
+      border-radius: 6px;
+      padding: 9px 12px;
+      margin-top: 14px;
+      font-size: 13px;
+      color: #1e3a8a;
+    }
+    .allowance-banner strong {
+      color: #102a43;
+    }
+
     button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; background: #102a43; color: white; font-weight: 600; transition: background 0.2s; }
     button:hover { background: #243b53; }
     button:disabled { background: #9fb3c8; cursor: not-allowed; }
@@ -192,6 +212,14 @@
           </div>
 
           <p style="margin-bottom: 0;">Net Portfolio Value (NZD): <br><span class="stat-highlight" id="lblTotal">$0.00</span></p>
+
+          <div id="weeklyAllowanceBanner" class="allowance-banner">
+            <span>
+              <strong>Weekly Cash Allowance:</strong>
+              <span id="weeklyAllowanceAmount">$0.00</span>
+            </span>
+            <span style="font-size: 12px; color: #486581;">Paid Mondays at 8:00 AM NZDT</span>
+          </div>
         </div>
         
         <div class="card">
@@ -527,6 +555,7 @@
         portfolioChartInstance = null;
       }
       updateHeaderRank(null);
+      document.getElementById('weeklyAllowanceBanner').style.display = 'none';
       document.getElementById('peerSummaryBar').classList.add('hidden');
       document.getElementById('portfolioSwitcher').classList.add('hidden');
       document.getElementById('headerUserGreeting').classList.add('hidden');
@@ -697,7 +726,7 @@
         sb.from('students').select('id, name, cash, term_deposit, savings, bonds, loan_balance').eq('classroom_id', classId),
         sb.from('holdings').select('student_id, ticker, quantity, avg_price'),
         sb.from('portfolio_history').select('snapshot_date, total_net_worth').eq('student_id', currentStudent.id).order('snapshot_date'),
-        sb.from('classroom_settings').select('class_name, term_deposit_rate, savings_rate, bonds_rate, max_borrow_pct, borrow_rate').eq('classroom_id', classId).maybeSingle()
+        sb.from('classroom_settings').select('class_name, term_deposit_rate, savings_rate, bonds_rate, max_borrow_pct, borrow_rate, weekly_stipend').eq('classroom_id', classId).maybeSingle()
       ]);
 
       if (studentRes.data) {
@@ -759,6 +788,19 @@
       document.getElementById('lblTotal').innerText = formatMoney(netWorth);
 
       const rates = ratesRes.data;
+      const allowanceBanner = document.getElementById('weeklyAllowanceBanner');
+      const allowanceAmtEl = document.getElementById('weeklyAllowanceAmount');
+      const weeklyStipend = Number(rates?.weekly_stipend) || 0;
+
+      if (allowanceBanner && allowanceAmtEl) {
+        if (weeklyStipend > 0) {
+          allowanceAmtEl.innerText = formatMoney(weeklyStipend);
+          allowanceBanner.style.display = 'flex';
+        } else {
+          allowanceBanner.style.display = 'none';
+        }
+      }
+
       if (rates) {
         const allocSel = document.getElementById('allocAccount');
         allocSel.options[0].text = `Savings Account (${rates.savings_rate}% / day)`;
