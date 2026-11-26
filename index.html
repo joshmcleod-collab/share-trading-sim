@@ -160,6 +160,9 @@
     .research-link:hover { text-decoration: underline; }
     .holding-company { display: block; font-size: 12px; color: #334e68; font-weight: 500; margin-top: 1px; }
     .holding-shares { display: block; font-size: 11px; color: #64748b; margin-top: 1px; }
+    .holding-row-clickable { cursor: pointer; transition: background 0.15s ease; }
+    .holding-row-clickable:hover { background: #eff6ff; }
+    .trading-desk-flash { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35); transition: box-shadow 0.3s ease; }
     @media (max-width: 700px) {
       .dashboard-grid, .alloc-grid { grid-template-columns: 1fr; }
       .sub-balances { grid-template-columns: repeat(2, 1fr); }
@@ -222,7 +225,7 @@
           </div>
         </div>
         
-        <div class="card">
+        <div id="tradingDeskCard" class="card">
           <h3 style="margin-top: 0;">Trading Desk</h3>
           <div id="tradeAlert" class="alert"></div>
           
@@ -316,7 +319,10 @@
       <div class="dashboard-grid">
         <div class="card" style="overflow-x: auto;">
           <div class="card-header-row">
-            <h3 id="holdingsTitle" style="margin: 0;">Your Holdings</h3>
+            <div>
+              <h3 id="holdingsTitle" style="margin: 0;">Your Holdings</h3>
+              <span id="holdingsSubtitle" class="card-subtitle">Click a holding to sell or trade</span>
+            </div>
             <button
               id="resetHoldingsBtn"
               type="button"
@@ -621,6 +627,12 @@
       const displayName = targetStudent ? targetStudent.name : currentStudent.name;
 
       titleEl.innerText = isOwnPortfolio ? 'Your Holdings' : `${displayName}'s Holdings`;
+      const subtitleEl = document.getElementById('holdingsSubtitle');
+      if (subtitleEl) {
+        subtitleEl.innerText = isOwnPortfolio
+          ? 'Click a holding to sell or trade'
+          : 'Click a holding to load into Trading Desk';
+      }
 
       if (isOwnPortfolio || !targetStudent) {
         resetBtn.classList.add('hidden');
@@ -667,7 +679,11 @@
         else if (profitLoss < -0.005) { arrow = '▼'; color = '#dc2626'; sign = '-'; }
 
         tbody.innerHTML += `
-          <tr>
+          <tr
+            class="holding-row-clickable"
+            title="${isOwnPortfolio ? 'Click to load into Trading Desk' : 'Click to view in Trading Desk'}"
+            onclick="loadHoldingIntoTradeDesk('${escapeHtml(h.ticker)}', ${currentValue.toFixed(2)}, ${isOwnPortfolio})"
+          >
             <td>
               <strong>${escapeHtml(h.ticker)}</strong>
               ${companyName ? `<span class="holding-company">${escapeHtml(companyName)}</span>` : ''}
@@ -965,6 +981,53 @@
       } else {
         linkEl.classList.add('hidden');
       }
+    }
+
+    function loadHoldingIntoTradeDesk(ticker, heldValue, isOwnPortfolio) {
+      const stock = allAvailableStocks.find(s => normTicker(s.ticker) === normTicker(ticker));
+      if (!stock) {
+        showAlert('tradeAlert', `${ticker} is not currently listed in the Trading Desk.`, true);
+        return;
+      }
+
+      const marketSelect = document.getElementById('tradeMarket');
+      const tickerSelect = document.getElementById('tradeTicker');
+      const amountInput = document.getElementById('tradeAmount');
+      const deskCard = document.getElementById('tradingDeskCard');
+
+      // 1. Switch market first so the ticker exists in tradeTicker
+      if (stock.market_type) {
+        marketSelect.value = stock.market_type;
+        filterTickersByMarket();
+      }
+
+      // 2. Select the ticker and refresh the research link
+      tickerSelect.value = stock.ticker;
+      updateStockLink();
+
+      // 3. Pre-fill full held value if viewing own portfolio; otherwise leave blank
+      if (isOwnPortfolio && Number(heldValue) > 0) {
+        amountInput.value = Number(heldValue).toFixed(2);
+        showAlert(
+          'tradeAlert',
+          `Loaded ${stock.ticker} (${formatMoney(heldValue)} held). Click SELL to sell all, or enter a different amount.`
+        );
+      } else {
+        amountInput.value = '';
+        showAlert('tradeAlert', `Loaded ${stock.ticker} into the Trading Desk.`);
+      }
+
+      // 4. Scroll to Trading Desk, flash border, and focus/select amount
+      if (deskCard) {
+        deskCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        deskCard.classList.add('trading-desk-flash');
+        setTimeout(() => deskCard.classList.remove('trading-desk-flash'), 900);
+      }
+
+      setTimeout(() => {
+        amountInput.focus();
+        if (amountInput.value) amountInput.select();
+      }, 250);
     }
 
     async function executeTrade(action) {
